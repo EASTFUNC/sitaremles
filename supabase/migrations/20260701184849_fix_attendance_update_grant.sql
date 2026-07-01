@@ -1,0 +1,1 @@
+grant update on attendance_logs to authenticated;
