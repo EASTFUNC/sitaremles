@@ -1,85 +1,196 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ScrollView } from "react-native";
+import { View, Text, TextInput, FlatList, StyleSheet, ScrollView, Pressable } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
-import { supabase } from "./lib/supabase";
-import type { Session } from "@supabase/supabase-js";
 import * as ImagePicker from "expo-image-picker";
+import { useFonts } from "expo-font";
+import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from "@expo-google-fonts/space-grotesk";
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
+import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
+import { supabase } from "./lib/supabase";
+import { ThemeProvider, useTheme } from "./lib/ThemeContext";
+import type { ThemeColors } from "./lib/theme";
+import AppButton from "./components/AppButton";
+import type { Session } from "@supabase/supabase-js";
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    SpaceGrotesk_600SemiBold,
+    SpaceGrotesk_700Bold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    IBMPlexMono_400Regular,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
+  return (
+    <ThemeProvider>
+      <AuthGate />
+    </ThemeProvider>
+  );
+}
+
+function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecked(true);
+    });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  if (!session) {
-    return <LoginScreen />;
-  }
+  if (!checked) return null;
+  if (!session) return <LoginScreen />;
   return <MainTabs />;
 }
 
 function LoginScreen() {
+  const { colors, mode, toggleTheme } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
     setError("");
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
     if (error) setError(error.message);
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>SITAREMLES GiriÅŸ</Text>
+    <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: "center", paddingHorizontal: 24 }}>
+      <Pressable
+        onPress={toggleTheme}
+        style={{ position: "absolute", top: 60, right: 24, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
+      >
+        <Text>{mode === "light" ? "🌙" : "☀️"}</Text>
+      </Pressable>
+
+      <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 30, color: colors.text, marginBottom: 6 }}>
+        SITAREMLES
+      </Text>
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.textSecondary, marginBottom: 32 }}>
+        Doğrulanmış operasyon yönetimi
+      </Text>
+
       <TextInput
-        style={styles.input}
         placeholder="E-posta"
+        placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
         value={email}
         onChangeText={setEmail}
+        style={{
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.bgElevated,
+          color: colors.text,
+          borderRadius: 10,
+          padding: 12,
+          marginBottom: 12,
+          fontFamily: "Inter_400Regular",
+        }}
       />
       <TextInput
-        style={styles.input}
-        placeholder="Åifre"
+        placeholder="Şifre"
+        placeholderTextColor={colors.textSecondary}
         secureTextEntry
         value={password}
         onChangeText={setPassword}
+        style={{
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.bgElevated,
+          color: colors.text,
+          borderRadius: 10,
+          padding: 12,
+          marginBottom: 16,
+          fontFamily: "Inter_400Regular",
+        }}
       />
-      {error ? <Text style={{ color: "red" }}>{error}</Text> : null}
-      <Button title="GiriÅŸ Yap" onPress={handleLogin} />
+
+      {error ? <Text style={{ color: "#D64545", marginBottom: 12, fontFamily: "Inter_400Regular" }}>{error}</Text> : null}
+
+      <AppButton title="Giriş Yap" onPress={handleLogin} loading={loading} />
     </View>
   );
 }
+
 function MainTabs() {
-  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense" | "tasks" | "payroll">("checkin");
+  const { colors, mode, toggleTheme } = useTheme();
+  const [tab, setTab] = useState<"checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll">("checkin");
+
+  const tabs: { key: typeof tab; label: string; icon: string }[] = [
+    { key: "checkin", label: "Giriş-Çıkış", icon: "📍" },
+    { key: "shifts", label: "Vardiyam", icon: "📅" },
+    { key: "leave", label: "İzinlerim", icon: "🗓️" },
+    { key: "expense", label: "Avans", icon: "💳" },
+    { key: "tasks", label: "Görevlerim", icon: "✅" },
+    { key: "payroll", label: "Bordrom", icon: "🧾" },
+  ];
+
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1 }}>
-        {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "checkin" && <CheckInScreen />}
+        {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
         {tab === "expense" && <ExpenseRequestScreen />}
         {tab === "tasks" && <TasksScreen />}
         {tab === "payroll" && <PayrollScreen />}
       </View>
-      <ScrollView
-        horizontal
-        style={styles.tabBar}
-        contentContainerStyle={{ alignItems: "center", paddingHorizontal: 8, gap: 4 }}
-      >
-        <Button title="Giriş-Çıkış" onPress={() => setTab("checkin")} />
-        <Button title="Vardiyam" onPress={() => setTab("shifts")} />
-        <Button title="İzinlerim" onPress={() => setTab("leave")} />
-        <Button title="Avans" onPress={() => setTab("expense")} />
-        <Button title="Görevlerim" onPress={() => setTab("tasks")} />
-        <Button title="Bordrom" onPress={() => setTab("payroll")} />
-      </ScrollView>
+      <View style={{ flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bgElevated }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 10, gap: 6, alignItems: "center" }}
+        >
+          {tabs.map((t) => {
+            const active = tab === t.key;
+            return (
+              <Pressable
+                key={t.key}
+                onPress={() => setTab(t.key)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 20,
+                  backgroundColor: active ? colors.accent : "transparent",
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>{t.icon}</Text>
+                <Text
+                  style={{
+                    color: active ? colors.accentContrast : colors.textSecondary,
+                    fontFamily: active ? "Inter_600SemiBold" : "Inter_400Regular",
+                    fontSize: 13,
+                  }}
+                >
+                  {t.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable onPress={toggleTheme} style={{ paddingHorizontal: 14 }}>
+          <Text style={{ fontSize: 16 }}>{mode === "light" ? "🌙" : "☀️"}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -89,6 +200,8 @@ function CheckInScreen() {
   const [scanned, setScanned] = useState(false);
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   async function handleScan({ data }: { data: string }) {
     if (scanned || loading) return;
@@ -129,51 +242,100 @@ function CheckInScreen() {
   }
 
   if (!permission) {
-    return <View style={styles.container}><Text>Kamera izni kontrol ediliyor...</Text></View>;
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.text, fontFamily: "Inter_400Regular" }}>Kamera izni kontrol ediliyor...</Text>
+      </View>
+    );
   }
 
   if (!permission.granted) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Kamera İzni Gerekli</Text>
-        <Button title="İzin Ver" onPress={requestPermission} />
+        <AppButton title="İzin Ver" onPress={requestPermission} />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {!scanned ? (
-        <CameraView
-          style={{ flex: 1 }}
-          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-          onBarcodeScanned={handleScan}
-        />
+        <CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={handleScan} />
       ) : (
         <View style={styles.container}>
-          <Text style={styles.title}>{loading ? "Ä°ÅŸleniyor..." : "SonuÃ§"}</Text>
-          <Text style={{ marginBottom: 20 }}>{result}</Text>
-          <Button
-            title="Tekrar Okut"
-            onPress={() => {
-              setScanned(false);
-              setResult("");
-            }}
-          />
+          <Text style={styles.title}>{loading ? "İşleniyor..." : "Sonuç"}</Text>
+          <View style={styles.card}>
+            <Text style={{ color: colors.text, fontFamily: "Inter_400Regular", lineHeight: 20 }}>{result}</Text>
+          </View>
+          <AppButton title="Tekrar Okut" onPress={() => { setScanned(false); setResult(""); }} variant="secondary" />
         </View>
       )}
     </View>
   );
 }
+
+function WeeklyShiftsScreen() {
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+
+  useEffect(() => {
+    loadShifts();
+  }, []);
+
+  async function loadShifts() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data, error } = await supabase
+      .from("shift_assignments")
+      .select("id, work_date, branches(name), shift_templates(name, start_time, end_time)")
+      .eq("user_id", userId)
+      .order("work_date", { ascending: true });
+    if (error) console.log("Hata:", error.message);
+    setShifts(data ?? []);
+    setLoading(false);
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Haftalık Vardiyam</Text>
+      {loading ? (
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      ) : (
+        <FlatList
+          data={shifts}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>{item.work_date}</Text>
+              <Text style={styles.cardText}>Şube: {item.branches?.name}</Text>
+              <Text style={styles.cardText}>
+                {item.shift_templates?.name} ({item.shift_templates?.start_time} - {item.shift_templates?.end_time})
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz vardiya ataması yok.</Text>}
+        />
+      )}
+      <AppButton title="Çıkış Yap" onPress={() => supabase.auth.signOut()} variant="secondary" />
+    </View>
+  );
+}
+
 function LeaveRequestScreen() {
   const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
+  const [balances, setBalances] = useState<any[]>([]);
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<string>("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [balances, setBalances] = useState<any[]>([]);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   useEffect(() => {
     loadData();
@@ -183,27 +345,16 @@ function LeaveRequestScreen() {
     setLoading(true);
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("id", userId)
-      .single();
-
-    const { data: types } = await supabase
-      .from("leave_types")
-      .select("id, name")
-      .eq("company_id", profile?.company_id);
-
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userId).single();
+    const { data: types } = await supabase.from("leave_types").select("id, name").eq("company_id", profile?.company_id);
+    const { data: balanceData } = await supabase.rpc("get_leave_balances", { p_user_id: userId });
+    setBalances(balanceData ?? []);
     const { data: requests } = await supabase
       .from("leave_requests")
       .select("id, start_date, end_date, status, leave_types(name)")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
-
     setLeaveTypes(types ?? []);
-    const { data: balanceData } = await supabase.rpc("get_leave_balances", { p_user_id: userId });
-    setBalances(balanceData ?? []);
     setMyRequests(requests ?? []);
     if (types && types.length > 0) setSelectedTypeId(types[0].id);
     setLoading(false);
@@ -215,16 +366,9 @@ function LeaveRequestScreen() {
       setMessage("Lütfen tüm alanları doldurun (tarih formatı: YYYY-AA-GG, örn. 2026-07-15).");
       return;
     }
-
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("id", userId)
-      .single();
-
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userId).single();
     const { error } = await supabase.from("leave_requests").insert({
       company_id: profile?.company_id,
       user_id: userId,
@@ -232,7 +376,6 @@ function LeaveRequestScreen() {
       start_date: startDate,
       end_date: endDate,
     });
-
     if (error) {
       setMessage(`Hata: ${error.message}`);
     } else {
@@ -243,64 +386,84 @@ function LeaveRequestScreen() {
     }
   }
 
+  function statusBadge(status: string) {
+    const map: Record<string, { label: string; color: string }> = {
+      pending: { label: "Beklemede", color: colors.accent },
+      approved: { label: "Onaylandı", color: colors.success },
+      rejected: { label: "Reddedildi", color: "#D64545" },
+    };
+    const s = map[status] ?? map.pending;
+    return (
+      <View style={[styles.badge, { backgroundColor: `${s.color}22` }]}>
+        <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
+      </View>
+    );
+  }
+
   if (loading) {
-    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
   }
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>İzin Talebi Oluştur</Text>
-      <View style={{ marginBottom: 16 }}>
+
+      <View style={{ marginBottom: 8 }}>
         {balances.map((b) => (
-          <Text key={b.leave_type_id}>
+          <Text key={b.leave_type_id} style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginBottom: 2 }}>
             {b.leave_type_name}: {b.remaining_days} / {b.entitled_days} gün kaldı
           </Text>
         ))}
       </View>
 
-      <Text>İzin Türü:</Text>
-      {leaveTypes.map((t) => (
-        <Button
-          key={t.id}
-          title={selectedTypeId === t.id ? `✓ ${t.name}` : t.name}
-          onPress={() => setSelectedTypeId(t.id)}
-        />
-      ))}
-
-      <TextInput
-        style={styles.input}
-        placeholder="Başlangıç Tarihi (2026-07-15)"
-        value={startDate}
-        onChangeText={setStartDate}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Bitiş Tarihi (2026-07-18)"
-        value={endDate}
-        onChangeText={setEndDate}
-      />
-
-      <Button title="Talep Gönder" onPress={submitRequest} />
-      {message ? <Text style={{ marginVertical: 10 }}>{message}</Text> : null}
-
-      <Text style={[styles.title, { fontSize: 18, marginTop: 30 }]}>Taleplerim</Text>
-      <FlatList
-        data={myRequests}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.cardDate}>{item.leave_types?.name}</Text>
-            <Text>{item.start_date} → {item.end_date}</Text>
-            <Text>
-              Durum: {item.status === "pending" ? "Beklemede" : item.status === "approved" ? "Onaylandı" : "Reddedildi"}
+      <Text style={styles.label}>İzin Türü</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        {leaveTypes.map((t) => (
+          <Pressable
+            key={t.id}
+            onPress={() => setSelectedTypeId(t.id)}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: selectedTypeId === t.id ? colors.accent : colors.border,
+              backgroundColor: selectedTypeId === t.id ? colors.accent : "transparent",
+            }}
+          >
+            <Text style={{ color: selectedTypeId === t.id ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+              {t.name}
             </Text>
-          </View>
-        )}
-        ListEmptyComponent={<Text>Henüz talebiniz yok.</Text>}
-      />
-    </View>
+          </Pressable>
+        ))}
+      </View>
+
+      <Text style={styles.label}>Başlangıç Tarihi</Text>
+      <TextInput style={styles.input} placeholder="2026-07-15" placeholderTextColor={colors.textSecondary} value={startDate} onChangeText={setStartDate} />
+      <Text style={styles.label}>Bitiş Tarihi</Text>
+      <TextInput style={styles.input} placeholder="2026-07-18" placeholderTextColor={colors.textSecondary} value={endDate} onChangeText={setEndDate} />
+
+      <AppButton title="Talep Gönder" onPress={submitRequest} />
+      {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
+
+      <Text style={styles.subtitle}>Taleplerim</Text>
+      {myRequests.map((item) => (
+        <View key={item.id} style={styles.card}>
+          <Text style={styles.cardTitle}>{item.leave_types?.name}</Text>
+          <Text style={styles.cardText}>{item.start_date} → {item.end_date}</Text>
+          {statusBadge(item.status)}
+        </View>
+      ))}
+      {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
+
 function ExpenseRequestScreen() {
   const [requestType, setRequestType] = useState<"advance" | "expense">("advance");
   const [amount, setAmount] = useState("");
@@ -309,6 +472,8 @@ function ExpenseRequestScreen() {
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   useEffect(() => {
     loadRequests();
@@ -325,13 +490,8 @@ function ExpenseRequestScreen() {
   }
 
   async function pickImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.5,
-    });
-    if (!result.canceled) {
-      setImageUri(result.assets[0].uri);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5 });
+    if (!result.canceled) setImageUri(result.assets[0].uri);
   }
 
   async function submitRequest() {
@@ -341,25 +501,16 @@ function ExpenseRequestScreen() {
       return;
     }
     setUploading(true);
-
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("id", userId)
-      .single();
-
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userId).single();
     let receiptUrl: string | null = null;
 
     if (imageUri) {
       const fileName = `${userId}_${Date.now()}.jpg`;
       const response = await fetch(imageUri);
       const blob = await response.blob();
-      const { error: uploadError } = await supabase.storage
-        .from("receipts")
-        .upload(fileName, blob, { contentType: "image/jpeg" });
-
+      const { error: uploadError } = await supabase.storage.from("receipts").upload(fileName, blob, { contentType: "image/jpeg" });
       if (uploadError) {
         setMessage(`Fotoğraf yüklenemedi: ${uploadError.message}`);
         setUploading(false);
@@ -390,66 +541,77 @@ function ExpenseRequestScreen() {
     }
   }
 
+  function statusBadge(status: string) {
+    const map: Record<string, { label: string; color: string }> = {
+      pending: { label: "Beklemede", color: colors.accent },
+      approved: { label: "Onaylandı", color: colors.success },
+      rejected: { label: "Reddedildi", color: "#D64545" },
+    };
+    const s = map[status] ?? map.pending;
+    return (
+      <View style={[styles.badge, { backgroundColor: `${s.color}22` }]}>
+        <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
+      </View>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Avans / Masraf Talebi</Text>
 
-      <Button
-        title={requestType === "advance" ? "✓ Avans" : "Avans"}
-        onPress={() => setRequestType("advance")}
-      />
-      <Button
-        title={requestType === "expense" ? "✓ Masraf" : "Masraf"}
-        onPress={() => setRequestType("expense")}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Tutar (₺)"
-        keyboardType="numeric"
-        value={amount}
-        onChangeText={setAmount}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Açıklama"
-        value={description}
-        onChangeText={setDescription}
-      />
-
-      <Button title={imageUri ? "Fiş Seçildi ✓" : "Fiş Fotoğrafı Seç"} onPress={pickImage} />
-
-      <View style={{ marginTop: 12 }}>
-        <Button title={uploading ? "Gönderiliyor..." : "Talep Gönder"} onPress={submitRequest} />
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+        {(["advance", "expense"] as const).map((type) => (
+          <Pressable
+            key={type}
+            onPress={() => setRequestType(type)}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: requestType === type ? colors.accent : colors.border,
+              backgroundColor: requestType === type ? colors.accent : "transparent",
+            }}
+          >
+            <Text style={{ color: requestType === type ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+              {type === "advance" ? "Avans" : "Masraf"}
+            </Text>
+          </Pressable>
+        ))}
       </View>
-      {message ? <Text style={{ marginVertical: 10 }}>{message}</Text> : null}
 
-      <Text style={[styles.title, { fontSize: 18, marginTop: 30 }]}>Taleplerim</Text>
-      <FlatList
-        data={myRequests}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.cardDate}>
-              {item.request_type === "advance" ? "Avans" : "Masraf"}: {item.amount} ₺
-            </Text>
-            <Text>{item.description}</Text>
-            <Text>
-              Durum: {item.status === "pending" ? "Beklemede" : item.status === "approved" ? "Onaylandı" : "Reddedildi"}
-            </Text>
-          </View>
-        )}
-        ListEmptyComponent={<Text>Henüz talebiniz yok.</Text>}
-      />
-    </View>
+      <Text style={styles.label}>Tutar (₺)</Text>
+      <TextInput style={styles.input} placeholder="0" placeholderTextColor={colors.textSecondary} keyboardType="numeric" value={amount} onChangeText={setAmount} />
+      <Text style={styles.label}>Açıklama</Text>
+      <TextInput style={styles.input} placeholder="Örn. Yemek" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} />
+
+      <AppButton title={imageUri ? "Fiş Seçildi ✓" : "Fiş Fotoğrafı Seç"} onPress={pickImage} variant="secondary" />
+      <AppButton title={uploading ? "Gönderiliyor..." : "Talep Gönder"} onPress={submitRequest} disabled={uploading} />
+
+      {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
+
+      <Text style={styles.subtitle}>Taleplerim</Text>
+      {myRequests.map((item) => (
+        <View key={item.id} style={styles.card}>
+          <Text style={styles.cardTitle}>{item.request_type === "advance" ? "Avans" : "Masraf"}: {item.amount} ₺</Text>
+          <Text style={styles.cardText}>{item.description}</Text>
+          {statusBadge(item.status)}
+        </View>
+      ))}
+      {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
+
 function TasksScreen() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [results, setResults] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   useEffect(() => {
     loadTasks();
@@ -475,12 +637,10 @@ function TasksScreen() {
       .eq("checklist_template_id", task.checklist_template_id)
       .order("sort_order", { ascending: true });
     setItems(itemsData ?? []);
-
     const { data: existingResults } = await supabase
       .from("task_item_results")
       .select("checklist_item_id, is_checked")
       .eq("task_assignment_id", task.id);
-
     const resultMap: Record<string, boolean> = {};
     existingResults?.forEach((r) => (resultMap[r.checklist_item_id] = r.is_checked));
     setResults(resultMap);
@@ -489,22 +649,16 @@ function TasksScreen() {
   async function toggleItem(itemId: string) {
     const newValue = !results[itemId];
     setResults({ ...results, [itemId]: newValue });
-
     const { data: existing } = await supabase
       .from("task_item_results")
       .select("id")
       .eq("task_assignment_id", selectedTask.id)
       .eq("checklist_item_id", itemId)
       .maybeSingle();
-
     if (existing) {
       await supabase.from("task_item_results").update({ is_checked: newValue }).eq("id", existing.id);
     } else {
-      await supabase.from("task_item_results").insert({
-        task_assignment_id: selectedTask.id,
-        checklist_item_id: itemId,
-        is_checked: newValue,
-      });
+      await supabase.from("task_item_results").insert({ task_assignment_id: selectedTask.id, checklist_item_id: itemId, is_checked: newValue });
     }
   }
 
@@ -515,7 +669,11 @@ function TasksScreen() {
   }
 
   if (loading) {
-    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
   }
 
   if (selectedTask) {
@@ -524,16 +682,13 @@ function TasksScreen() {
       <View style={styles.container}>
         <Text style={styles.title}>{selectedTask.checklist_templates?.title}</Text>
         {items.map((item) => (
-          <Button
-            key={item.id}
-            title={`${results[item.id] ? "☑" : "☐"} ${item.label}`}
-            onPress={() => toggleItem(item.id)}
-          />
+          <Pressable key={item.id} onPress={() => toggleItem(item.id)} style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 10 }]}>
+            <Text style={{ fontSize: 18 }}>{results[item.id] ? "☑" : "☐"}</Text>
+            <Text style={{ color: colors.text, fontFamily: "Inter_400Regular", flex: 1 }}>{item.label}</Text>
+          </Pressable>
         ))}
-        <View style={{ marginTop: 20 }}>
-          <Button title="Görevi Tamamla" onPress={completeTask} disabled={!allChecked} />
-          <Button title="Geri Dön" onPress={() => setSelectedTask(null)} />
-        </View>
+        <AppButton title="Görevi Tamamla" onPress={completeTask} disabled={!allChecked} />
+        <AppButton title="Geri Dön" onPress={() => setSelectedTask(null)} variant="secondary" />
       </View>
     );
   }
@@ -546,20 +701,29 @@ function TasksScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.cardDate}>{item.checklist_templates?.title}</Text>
-            <Text>Şube: {item.branches?.name} — Son Tarih: {item.due_date}</Text>
-            <Text>Durum: {item.status === "pending" ? "Beklemede" : item.status === "completed" ? "Tamamlandı" : "Devam Ediyor"}</Text>
-            {item.status !== "completed" && <Button title="Aç" onPress={() => openTask(item)} />}
+            <Text style={styles.cardTitle}>{item.checklist_templates?.title}</Text>
+            <Text style={styles.cardText}>Şube: {item.branches?.name} — Son Tarih: {item.due_date}</Text>
+            <Text style={styles.cardText}>
+              Durum: {item.status === "pending" ? "Beklemede" : item.status === "completed" ? "Tamamlandı" : "Devam Ediyor"}
+            </Text>
+            {item.status !== "completed" && (
+              <View style={{ marginTop: 8 }}>
+                <AppButton title="Aç" onPress={() => openTask(item)} variant="secondary" />
+              </View>
+            )}
           </View>
         )}
-        ListEmptyComponent={<Text>Henüz görev atanmadı.</Text>}
+        ListEmptyComponent={<Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz görev atanmadı.</Text>}
       />
     </View>
   );
 }
+
 function PayrollScreen() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
 
   useEffect(() => {
     loadRecords();
@@ -578,15 +742,16 @@ function PayrollScreen() {
   }
 
   async function approveRecord(id: string) {
-    await supabase
-      .from("payroll_approvals")
-      .update({ status: "approved", approved_at: new Date().toISOString() })
-      .eq("id", id);
+    await supabase.from("payroll_approvals").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", id);
     loadRecords();
   }
 
   if (loading) {
-    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
   }
 
   return (
@@ -597,76 +762,43 @@ function PayrollScreen() {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Text style={styles.cardDate}>{item.period}</Text>
-            <Text>
+            <Text style={styles.cardTitle}>{item.period}</Text>
+            <Text style={styles.cardText}>
               Durum: {item.status === "approved" ? `Onaylandı (${new Date(item.approved_at).toLocaleDateString("tr-TR")})` : "Beklemede"}
             </Text>
             {item.status === "pending" && (
-              <Button title="Okudum, Onaylıyorum" onPress={() => approveRecord(item.id)} />
+              <View style={{ marginTop: 8 }}>
+                <AppButton title="Okudum, Onaylıyorum" onPress={() => approveRecord(item.id)} />
+              </View>
             )}
           </View>
         )}
-        ListEmptyComponent={<Text>Henüz bordro kaydınız yok.</Text>}
+        ListEmptyComponent={<Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz bordro kaydınız yok.</Text>}
       />
     </View>
   );
 }
-function WeeklyShiftsScreen() {
-  const [shifts, setShifts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadShifts();
-  }, []);
-
-  async function loadShifts() {
-    setLoading(true);
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData.user?.id;
-
-    const { data, error } = await supabase
-      .from("shift_assignments")
-      .select("id, work_date, branches(name), shift_templates(name, start_time, end_time)")
-      .eq("user_id", userId)
-      .order("work_date", { ascending: true });
-
-    if (error) console.log("Hata:", error.message);
-    setShifts(data ?? []);
-    setLoading(false);
-  }
-
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>HaftalÄ±k Vardiyam</Text>
-      {loading ? (
-        <Text>YÃ¼kleniyor...</Text>
-      ) : (
-        <FlatList
-          data={shifts}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.cardDate}>{item.work_date}</Text>
-              <Text>Åube: {item.branches?.name}</Text>
-              <Text>
-                {item.shift_templates?.name} ({item.shift_templates?.start_time} - {item.shift_templates?.end_time})
-              </Text>
-            </View>
-          )}
-          ListEmptyComponent={<Text>HenÃ¼z vardiya atamasÄ± yok.</Text>}
-        />
-      )}
-      <Button title="Ã‡Ä±kÄ±ÅŸ Yap" onPress={() => supabase.auth.signOut()} />
-    </View>
-  );
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, paddingTop: 70, paddingHorizontal: 20, backgroundColor: colors.bg },
+    title: { fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 22, color: colors.text, marginBottom: 20 },
+    subtitle: { fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 17, color: colors.text, marginTop: 28, marginBottom: 12 },
+    label: { fontFamily: "Inter_500Medium", fontSize: 13, color: colors.textSecondary, marginBottom: 6, marginTop: 10 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.bgElevated,
+      color: colors.text,
+      padding: 12,
+      marginBottom: 4,
+      borderRadius: 10,
+      fontFamily: "Inter_400Regular",
+    },
+    card: { padding: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgElevated, borderRadius: 12, marginBottom: 10 },
+    cardTitle: { fontFamily: "SpaceGrotesk_600SemiBold", color: colors.text, marginBottom: 4, fontSize: 15 },
+    cardText: { fontFamily: "Inter_400Regular", color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+    badge: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, marginTop: 6 },
+    badgeText: { fontFamily: "IBMPlexMono_400Regular", fontSize: 11 },
+  });
 }
-
-
-const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 80, paddingHorizontal: 20 },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20 },
-  input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginBottom: 12, borderRadius: 6 },
-  card: { padding: 12, borderWidth: 1, borderColor: "#ddd", borderRadius: 8, marginBottom: 10 },
-  cardDate: { fontWeight: "bold", marginBottom: 4 },
-  tabBar: {  paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#ddd" },
-});
