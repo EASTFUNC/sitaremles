@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p backups
           supabase db dump \
-            --db-url "postgresql://postgres:${SUPABASE_DB_PASSWORD}@db.pgwxdeynioiqnuvcfltc.supabase.co:5432/postgres" \
+            --db-url "postgresql://postgres.pgwxdeynioiqnuvcfltc:${SUPABASE_DB_PASSWORD}@aws-1-eu-central-1.pooler.supabase.com:6543/postgres" \
             -f backups/backup_$(date +'%Y-%m-%d').sql
 
       - name: Commit backup
