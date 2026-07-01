@@ -23,7 +23,6 @@ jobs:
           supabase db dump \
             --db-url "postgresql://postgres.pgwxdeynioiqnuvcfltc:${SUPABASE_DB_PASSWORD}@aws-1-eu-central-1.pooler.supabase.com:6543/postgres" \
             -f backups/backup_$(date +'%Y-%m-%d').sql
-
       - name: Commit backup
         run: |
           git config user.name "github-actions[bot]"
