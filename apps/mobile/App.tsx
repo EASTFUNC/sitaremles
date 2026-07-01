@@ -88,7 +88,7 @@ function CheckInScreen() {
     try {
       const payload = JSON.parse(data);
       const branchId = payload.branch_id;
-      if (!branchId) throw new Error("QR kod geÃ§erli bir ÅŸube iÃ§ermiyor.");
+      if (!branchId) throw new Error("QR kod geçerli bir şube içermiyor.");
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error("Konum izni verilmedi.");
@@ -106,9 +106,9 @@ function CheckInScreen() {
       if (error) throw error;
 
       if (rpcResult.within_geofence) {
-        setResult(`GiriÅŸ kaydedildi. Åubeye mesafe: ${rpcResult.distance_m} metre.`);
+        setResult(`Giriş kaydedildi. Şubeye mesafe: ${rpcResult.distance_m} metre.`);
       } else {
-        setResult(`UyarÄ±: Åube dÄ±ÅŸÄ±ndan giriÅŸ algÄ±landÄ± (mesafe: ${rpcResult.distance_m} metre). KayÄ±t oluÅŸturuldu, yÃ¶netici bilgilendirilecek.`);
+        setResult(`Uyarı: Şube dışından giriş algılandı (mesafe: ${rpcResult.distance_m} metre). Kayıt oluşturuldu, yönetici bilgilendirilecek.`);
       }
     } catch (e: any) {
       setResult(`Hata: ${e.message}`);
@@ -124,8 +124,8 @@ function CheckInScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Kamera Ä°zni Gerekli</Text>
-        <Button title="Ä°zin Ver" onPress={requestPermission} />
+        <Text style={styles.title}>Kamera İzni Gerekli</Text>
+        <Button title="İzin Ver" onPress={requestPermission} />
       </View>
     );
   }
