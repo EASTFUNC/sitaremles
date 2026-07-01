@@ -57,7 +57,7 @@ function LoginScreen() {
   );
 }
 function MainTabs() {
-  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense">("checkin");
+  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense" | "tasks">("checkin");
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -65,12 +65,14 @@ function MainTabs() {
         {tab === "checkin" && <CheckInScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
         {tab === "expense" && <ExpenseRequestScreen />}
+        {tab === "tasks" && <TasksScreen />}
       </View>
       <View style={styles.tabBar}>
         <Button title="Giriş-Çıkış" onPress={() => setTab("checkin")} />
         <Button title="Vardiyam" onPress={() => setTab("shifts")} />
         <Button title="İzinlerim" onPress={() => setTab("leave")} />
         <Button title="Avans" onPress={() => setTab("expense")} />
+        <Button title="Görevlerim" onPress={() => setTab("tasks")} />
       </View>
     </View>
   );
@@ -432,6 +434,119 @@ function ExpenseRequestScreen() {
           </View>
         )}
         ListEmptyComponent={<Text>Henüz talebiniz yok.</Text>}
+      />
+    </View>
+  );
+}
+function TasksScreen() {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [results, setResults] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
+  async function loadTasks() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("task_assignments")
+      .select("id, due_date, status, checklist_template_id, checklist_templates(title), branches(name)")
+      .eq("assigned_to", userData.user?.id)
+      .order("due_date", { ascending: true });
+    setTasks(data ?? []);
+    setLoading(false);
+  }
+
+  async function openTask(task: any) {
+    setSelectedTask(task);
+    const { data: itemsData } = await supabase
+      .from("checklist_items")
+      .select("id, label, sort_order")
+      .eq("checklist_template_id", task.checklist_template_id)
+      .order("sort_order", { ascending: true });
+    setItems(itemsData ?? []);
+
+    const { data: existingResults } = await supabase
+      .from("task_item_results")
+      .select("checklist_item_id, is_checked")
+      .eq("task_assignment_id", task.id);
+
+    const resultMap: Record<string, boolean> = {};
+    existingResults?.forEach((r) => (resultMap[r.checklist_item_id] = r.is_checked));
+    setResults(resultMap);
+  }
+
+  async function toggleItem(itemId: string) {
+    const newValue = !results[itemId];
+    setResults({ ...results, [itemId]: newValue });
+
+    const { data: existing } = await supabase
+      .from("task_item_results")
+      .select("id")
+      .eq("task_assignment_id", selectedTask.id)
+      .eq("checklist_item_id", itemId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from("task_item_results").update({ is_checked: newValue }).eq("id", existing.id);
+    } else {
+      await supabase.from("task_item_results").insert({
+        task_assignment_id: selectedTask.id,
+        checklist_item_id: itemId,
+        is_checked: newValue,
+      });
+    }
+  }
+
+  async function completeTask() {
+    await supabase.from("task_assignments").update({ status: "completed" }).eq("id", selectedTask.id);
+    setSelectedTask(null);
+    loadTasks();
+  }
+
+  if (loading) {
+    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+  }
+
+  if (selectedTask) {
+    const allChecked = items.length > 0 && items.every((i) => results[i.id]);
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>{selectedTask.checklist_templates?.title}</Text>
+        {items.map((item) => (
+          <Button
+            key={item.id}
+            title={`${results[item.id] ? "☑" : "☐"} ${item.label}`}
+            onPress={() => toggleItem(item.id)}
+          />
+        ))}
+        <View style={{ marginTop: 20 }}>
+          <Button title="Görevi Tamamla" onPress={completeTask} disabled={!allChecked} />
+          <Button title="Geri Dön" onPress={() => setSelectedTask(null)} />
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Görevlerim</Text>
+      <FlatList
+        data={tasks}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.cardDate}>{item.checklist_templates?.title}</Text>
+            <Text>Şube: {item.branches?.name} — Son Tarih: {item.due_date}</Text>
+            <Text>Durum: {item.status === "pending" ? "Beklemede" : item.status === "completed" ? "Tamamlandı" : "Devam Ediyor"}</Text>
+            {item.status !== "completed" && <Button title="Aç" onPress={() => openTask(item)} />}
+          </View>
+        )}
+        ListEmptyComponent={<Text>Henüz görev atanmadı.</Text>}
       />
     </View>
   );
