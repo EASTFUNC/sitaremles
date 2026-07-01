@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, Button, FlatList, StyleSheet, Alert, ScrollView } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { supabase } from "./lib/supabase";
@@ -57,7 +57,7 @@ function LoginScreen() {
   );
 }
 function MainTabs() {
-  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense" | "tasks">("checkin");
+  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense" | "tasks" | "payroll">("checkin");
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
@@ -66,14 +66,20 @@ function MainTabs() {
         {tab === "leave" && <LeaveRequestScreen />}
         {tab === "expense" && <ExpenseRequestScreen />}
         {tab === "tasks" && <TasksScreen />}
+        {tab === "payroll" && <PayrollScreen />}
       </View>
-      <View style={styles.tabBar}>
+      <ScrollView
+        horizontal
+        style={styles.tabBar}
+        contentContainerStyle={{ alignItems: "center", paddingHorizontal: 8, gap: 4 }}
+      >
         <Button title="Giriş-Çıkış" onPress={() => setTab("checkin")} />
         <Button title="Vardiyam" onPress={() => setTab("shifts")} />
         <Button title="İzinlerim" onPress={() => setTab("leave")} />
         <Button title="Avans" onPress={() => setTab("expense")} />
         <Button title="Görevlerim" onPress={() => setTab("tasks")} />
-      </View>
+        <Button title="Bordrom" onPress={() => setTab("payroll")} />
+      </ScrollView>
     </View>
   );
 }
@@ -551,6 +557,60 @@ function TasksScreen() {
     </View>
   );
 }
+function PayrollScreen() {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRecords();
+  }, []);
+
+  async function loadRecords() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("payroll_approvals")
+      .select("id, period, status, approved_at")
+      .eq("user_id", userData.user?.id)
+      .order("period", { ascending: false });
+    setRecords(data ?? []);
+    setLoading(false);
+  }
+
+  async function approveRecord(id: string) {
+    await supabase
+      .from("payroll_approvals")
+      .update({ status: "approved", approved_at: new Date().toISOString() })
+      .eq("id", id);
+    loadRecords();
+  }
+
+  if (loading) {
+    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Bordro / Puantaj Onayı</Text>
+      <FlatList
+        data={records}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.cardDate}>{item.period}</Text>
+            <Text>
+              Durum: {item.status === "approved" ? `Onaylandı (${new Date(item.approved_at).toLocaleDateString("tr-TR")})` : "Beklemede"}
+            </Text>
+            {item.status === "pending" && (
+              <Button title="Okudum, Onaylıyorum" onPress={() => approveRecord(item.id)} />
+            )}
+          </View>
+        )}
+        ListEmptyComponent={<Text>Henüz bordro kaydınız yok.</Text>}
+      />
+    </View>
+  );
+}
 function WeeklyShiftsScreen() {
   const [shifts, setShifts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -608,5 +668,5 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: "#ccc", padding: 10, marginBottom: 12, borderRadius: 6 },
   card: { padding: 12, borderWidth: 1, borderColor: "#ddd", borderRadius: 8, marginBottom: 10 },
   cardDate: { fontWeight: "bold", marginBottom: 4 },
-  tabBar: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#ddd" },
+  tabBar: {  paddingVertical: 10, borderTopWidth: 1, borderTopColor: "#ddd" },
 });
