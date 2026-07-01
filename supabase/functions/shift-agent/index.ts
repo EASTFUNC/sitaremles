@@ -116,7 +116,12 @@ Her personele haftada en fazla 6 gün, en az 1 gün dinlenme olacak şekilde adi
       const { error: insertError } = await supabase.from("shift_assignments").insert(rows);
       if (insertError) throw insertError;
     }
-
+await supabase.from("ai_agent_runs").insert({
+      company_id,
+      agent_name: "shift_agent",
+      status: "success",
+      summary: `${validated.length} vardiya önerildi, ${rejected.length} reddedildi`,
+    });
     return new Response(
       JSON.stringify({
         success: true,

@@ -75,7 +75,12 @@ Deno.serve(async (req) => {
     );
     const finalData = await finalResponse.json();
     const answer = finalData.candidates?.[0]?.content?.parts?.[0]?.text ?? "Cevap oluşturulamadı.";
-
+await supabase.from("ai_agent_runs").insert({
+      company_id,
+      agent_name: "hr_insights_agent",
+      status: "success",
+      summary: question,
+    });
     return new Response(
       JSON.stringify({ success: true, answer, raw_data: toolResult }),
       { headers: { "Content-Type": "application/json" } }

@@ -50,7 +50,12 @@ Deno.serve(async (req) => {
     );
     const geminiData = await geminiResponse.json();
     const summary = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "Özet oluşturulamadı.";
-
+await supabase.from("ai_agent_runs").insert({
+      company_id,
+      agent_name: "audit_agent",
+      status: "success",
+      summary: `${flaggedCount} yeni kayıt işaretlendi`,
+    });
     return new Response(
       JSON.stringify({ success: true, flagged_count: flaggedCount, summary, records: suspiciousLogs }),
       { headers: { "Content-Type": "application/json" } }
