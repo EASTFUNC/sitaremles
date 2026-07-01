@@ -4,6 +4,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { supabase } from "./lib/supabase";
 import type { Session } from "@supabase/supabase-js";
+import * as ImagePicker from "expo-image-picker";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -56,18 +57,20 @@ function LoginScreen() {
   );
 }
 function MainTabs() {
-  const [tab, setTab] = useState<"shifts" | "checkin" | "leave">("checkin");
+  const [tab, setTab] = useState<"shifts" | "checkin" | "leave" | "expense">("checkin");
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
         {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "checkin" && <CheckInScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
+        {tab === "expense" && <ExpenseRequestScreen />}
       </View>
       <View style={styles.tabBar}>
         <Button title="Giriş-Çıkış" onPress={() => setTab("checkin")} />
         <Button title="Vardiyam" onPress={() => setTab("shifts")} />
         <Button title="İzinlerim" onPress={() => setTab("leave")} />
+        <Button title="Avans" onPress={() => setTab("expense")} />
       </View>
     </View>
   );
@@ -280,6 +283,149 @@ function LeaveRequestScreen() {
           <View style={styles.card}>
             <Text style={styles.cardDate}>{item.leave_types?.name}</Text>
             <Text>{item.start_date} → {item.end_date}</Text>
+            <Text>
+              Durum: {item.status === "pending" ? "Beklemede" : item.status === "approved" ? "Onaylandı" : "Reddedildi"}
+            </Text>
+          </View>
+        )}
+        ListEmptyComponent={<Text>Henüz talebiniz yok.</Text>}
+      />
+    </View>
+  );
+}
+function ExpenseRequestScreen() {
+  const [requestType, setRequestType] = useState<"advance" | "expense">("advance");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  async function loadRequests() {
+    const { data: userData } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("expense_requests")
+      .select("id, request_type, amount, description, status, created_at")
+      .eq("user_id", userData.user?.id)
+      .order("created_at", { ascending: false });
+    setMyRequests(data ?? []);
+  }
+
+  async function pickImage() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.5,
+    });
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  }
+
+  async function submitRequest() {
+    setMessage("");
+    if (!amount) {
+      setMessage("Lütfen tutar girin.");
+      return;
+    }
+    setUploading(true);
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+
+    let receiptUrl: string | null = null;
+
+    if (imageUri) {
+      const fileName = `${userId}_${Date.now()}.jpg`;
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(fileName, blob, { contentType: "image/jpeg" });
+
+      if (uploadError) {
+        setMessage(`Fotoğraf yüklenemedi: ${uploadError.message}`);
+        setUploading(false);
+        return;
+      }
+      receiptUrl = fileName;
+    }
+
+    const { error } = await supabase.from("expense_requests").insert({
+      company_id: profile?.company_id,
+      user_id: userId,
+      request_type: requestType,
+      amount: Number(amount),
+      description,
+      receipt_url: receiptUrl,
+    });
+
+    setUploading(false);
+
+    if (error) {
+      setMessage(`Hata: ${error.message}`);
+    } else {
+      setMessage("Talep gönderildi.");
+      setAmount("");
+      setDescription("");
+      setImageUri(null);
+      loadRequests();
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Avans / Masraf Talebi</Text>
+
+      <Button
+        title={requestType === "advance" ? "✓ Avans" : "Avans"}
+        onPress={() => setRequestType("advance")}
+      />
+      <Button
+        title={requestType === "expense" ? "✓ Masraf" : "Masraf"}
+        onPress={() => setRequestType("expense")}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Tutar (₺)"
+        keyboardType="numeric"
+        value={amount}
+        onChangeText={setAmount}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Açıklama"
+        value={description}
+        onChangeText={setDescription}
+      />
+
+      <Button title={imageUri ? "Fiş Seçildi ✓" : "Fiş Fotoğrafı Seç"} onPress={pickImage} />
+
+      <View style={{ marginTop: 12 }}>
+        <Button title={uploading ? "Gönderiliyor..." : "Talep Gönder"} onPress={submitRequest} />
+      </View>
+      {message ? <Text style={{ marginVertical: 10 }}>{message}</Text> : null}
+
+      <Text style={[styles.title, { fontSize: 18, marginTop: 30 }]}>Taleplerim</Text>
+      <FlatList
+        data={myRequests}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.cardDate}>
+              {item.request_type === "advance" ? "Avans" : "Masraf"}: {item.amount} ₺
+            </Text>
+            <Text>{item.description}</Text>
             <Text>
               Durum: {item.status === "pending" ? "Beklemede" : item.status === "approved" ? "Onaylandı" : "Reddedildi"}
             </Text>

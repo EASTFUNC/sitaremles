@@ -10,7 +10,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Giriş-çıkış QR kodunu okutmak için kameraya erişim gerekiyor.",
-        "NSLocationWhenInUseUsageDescription": "Giriş-çıkış konumunu doğrulamak için konumunuza erişim gerekiyor."
+        "NSLocationWhenInUseUsageDescription": "Giriş-çıkış konumunu doğrulamak için konumunuza erişim gerekiyor.",
+        "NSPhotoLibraryUsageDescription": "Fiş fotoğrafı yüklemek için galeriye erişim gerekiyor."
       }
     },
     "android": {
