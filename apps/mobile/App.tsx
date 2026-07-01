@@ -35,7 +35,7 @@ function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>SITAREMLES Giriş</Text>
+      <Text style={styles.title}>SITAREMLES GiriÅŸ</Text>
       <TextInput
         style={styles.input}
         placeholder="E-posta"
@@ -45,26 +45,29 @@ function LoginScreen() {
       />
       <TextInput
         style={styles.input}
-        placeholder="Şifre"
+        placeholder="Åifre"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
       {error ? <Text style={{ color: "red" }}>{error}</Text> : null}
-      <Button title="Giriş Yap" onPress={handleLogin} />
+      <Button title="GiriÅŸ Yap" onPress={handleLogin} />
     </View>
   );
 }
 function MainTabs() {
-  const [tab, setTab] = useState<"shifts" | "checkin">("checkin");
+  const [tab, setTab] = useState<"shifts" | "checkin" | "leave">("checkin");
   return (
     <View style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        {tab === "shifts" ? <WeeklyShiftsScreen /> : <CheckInScreen />}
+        {tab === "shifts" && <WeeklyShiftsScreen />}
+        {tab === "checkin" && <CheckInScreen />}
+        {tab === "leave" && <LeaveRequestScreen />}
       </View>
       <View style={styles.tabBar}>
         <Button title="Giriş-Çıkış" onPress={() => setTab("checkin")} />
         <Button title="Vardiyam" onPress={() => setTab("shifts")} />
+        <Button title="İzinlerim" onPress={() => setTab("leave")} />
       </View>
     </View>
   );
@@ -85,7 +88,7 @@ function CheckInScreen() {
     try {
       const payload = JSON.parse(data);
       const branchId = payload.branch_id;
-      if (!branchId) throw new Error("QR kod geçerli bir şube içermiyor.");
+      if (!branchId) throw new Error("QR kod geÃ§erli bir ÅŸube iÃ§ermiyor.");
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") throw new Error("Konum izni verilmedi.");
@@ -103,9 +106,9 @@ function CheckInScreen() {
       if (error) throw error;
 
       if (rpcResult.within_geofence) {
-        setResult(`Giriş kaydedildi. Şubeye mesafe: ${rpcResult.distance_m} metre.`);
+        setResult(`GiriÅŸ kaydedildi. Åubeye mesafe: ${rpcResult.distance_m} metre.`);
       } else {
-        setResult(`Uyarı: Şube dışından giriş algılandı (mesafe: ${rpcResult.distance_m} metre). Kayıt oluşturuldu, yönetici bilgilendirilecek.`);
+        setResult(`UyarÄ±: Åube dÄ±ÅŸÄ±ndan giriÅŸ algÄ±landÄ± (mesafe: ${rpcResult.distance_m} metre). KayÄ±t oluÅŸturuldu, yÃ¶netici bilgilendirilecek.`);
       }
     } catch (e: any) {
       setResult(`Hata: ${e.message}`);
@@ -121,8 +124,8 @@ function CheckInScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Kamera İzni Gerekli</Text>
-        <Button title="İzin Ver" onPress={requestPermission} />
+        <Text style={styles.title}>Kamera Ä°zni Gerekli</Text>
+        <Button title="Ä°zin Ver" onPress={requestPermission} />
       </View>
     );
   }
@@ -137,7 +140,7 @@ function CheckInScreen() {
         />
       ) : (
         <View style={styles.container}>
-          <Text style={styles.title}>{loading ? "İşleniyor..." : "Sonuç"}</Text>
+          <Text style={styles.title}>{loading ? "Ä°ÅŸleniyor..." : "SonuÃ§"}</Text>
           <Text style={{ marginBottom: 20 }}>{result}</Text>
           <Button
             title="Tekrar Okut"
@@ -148,6 +151,132 @@ function CheckInScreen() {
           />
         </View>
       )}
+    </View>
+  );
+}
+function LeaveRequestScreen() {
+  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
+  const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [selectedTypeId, setSelectedTypeId] = useState<string>("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+
+    const { data: types } = await supabase
+      .from("leave_types")
+      .select("id, name")
+      .eq("company_id", profile?.company_id);
+
+    const { data: requests } = await supabase
+      .from("leave_requests")
+      .select("id, start_date, end_date, status, leave_types(name)")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    setLeaveTypes(types ?? []);
+    setMyRequests(requests ?? []);
+    if (types && types.length > 0) setSelectedTypeId(types[0].id);
+    setLoading(false);
+  }
+
+  async function submitRequest() {
+    setMessage("");
+    if (!selectedTypeId || !startDate || !endDate) {
+      setMessage("Lütfen tüm alanları doldurun (tarih formatı: YYYY-AA-GG, örn. 2026-07-15).");
+      return;
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+
+    const { error } = await supabase.from("leave_requests").insert({
+      company_id: profile?.company_id,
+      user_id: userId,
+      leave_type_id: selectedTypeId,
+      start_date: startDate,
+      end_date: endDate,
+    });
+
+    if (error) {
+      setMessage(`Hata: ${error.message}`);
+    } else {
+      setMessage("Talep gönderildi.");
+      setStartDate("");
+      setEndDate("");
+      loadData();
+    }
+  }
+
+  if (loading) {
+    return <View style={styles.container}><Text>Yükleniyor...</Text></View>;
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>İzin Talebi Oluştur</Text>
+
+      <Text>İzin Türü:</Text>
+      {leaveTypes.map((t) => (
+        <Button
+          key={t.id}
+          title={selectedTypeId === t.id ? `✓ ${t.name}` : t.name}
+          onPress={() => setSelectedTypeId(t.id)}
+        />
+      ))}
+
+      <TextInput
+        style={styles.input}
+        placeholder="Başlangıç Tarihi (2026-07-15)"
+        value={startDate}
+        onChangeText={setStartDate}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Bitiş Tarihi (2026-07-18)"
+        value={endDate}
+        onChangeText={setEndDate}
+      />
+
+      <Button title="Talep Gönder" onPress={submitRequest} />
+      {message ? <Text style={{ marginVertical: 10 }}>{message}</Text> : null}
+
+      <Text style={[styles.title, { fontSize: 18, marginTop: 30 }]}>Taleplerim</Text>
+      <FlatList
+        data={myRequests}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <Text style={styles.cardDate}>{item.leave_types?.name}</Text>
+            <Text>{item.start_date} → {item.end_date}</Text>
+            <Text>
+              Durum: {item.status === "pending" ? "Beklemede" : item.status === "approved" ? "Onaylandı" : "Reddedildi"}
+            </Text>
+          </View>
+        )}
+        ListEmptyComponent={<Text>Henüz talebiniz yok.</Text>}
+      />
     </View>
   );
 }
@@ -177,9 +306,9 @@ function WeeklyShiftsScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Haftalık Vardiyam</Text>
+      <Text style={styles.title}>HaftalÄ±k Vardiyam</Text>
       {loading ? (
-        <Text>Yükleniyor...</Text>
+        <Text>YÃ¼kleniyor...</Text>
       ) : (
         <FlatList
           data={shifts}
@@ -187,16 +316,16 @@ function WeeklyShiftsScreen() {
           renderItem={({ item }) => (
             <View style={styles.card}>
               <Text style={styles.cardDate}>{item.work_date}</Text>
-              <Text>Şube: {item.branches?.name}</Text>
+              <Text>Åube: {item.branches?.name}</Text>
               <Text>
                 {item.shift_templates?.name} ({item.shift_templates?.start_time} - {item.shift_templates?.end_time})
               </Text>
             </View>
           )}
-          ListEmptyComponent={<Text>Henüz vardiya ataması yok.</Text>}
+          ListEmptyComponent={<Text>HenÃ¼z vardiya atamasÄ± yok.</Text>}
         />
       )}
-      <Button title="Çıkış Yap" onPress={() => supabase.auth.signOut()} />
+      <Button title="Ã‡Ä±kÄ±ÅŸ Yap" onPress={() => supabase.auth.signOut()} />
     </View>
   );
 }
