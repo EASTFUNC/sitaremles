@@ -162,6 +162,7 @@ function LeaveRequestScreen() {
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [balances, setBalances] = useState<any[]>([]);
 
   useEffect(() => {
     loadData();
@@ -190,6 +191,8 @@ function LeaveRequestScreen() {
       .order("created_at", { ascending: false });
 
     setLeaveTypes(types ?? []);
+    const { data: balanceData } = await supabase.rpc("get_leave_balances", { p_user_id: userId });
+    setBalances(balanceData ?? []);
     setMyRequests(requests ?? []);
     if (types && types.length > 0) setSelectedTypeId(types[0].id);
     setLoading(false);
@@ -236,6 +239,13 @@ function LeaveRequestScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>İzin Talebi Oluştur</Text>
+      <View style={{ marginBottom: 16 }}>
+        {balances.map((b) => (
+          <Text key={b.leave_type_id}>
+            {b.leave_type_name}: {b.remaining_days} / {b.entitled_days} gün kaldı
+          </Text>
+        ))}
+      </View>
 
       <Text>İzin Türü:</Text>
       {leaveTypes.map((t) => (
