@@ -7,6 +7,7 @@ import { useFonts } from "expo-font";
 import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from "@expo-google-fonts/space-grotesk";
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "./lib/supabase";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import type { ThemeColors } from "./lib/theme";
@@ -75,7 +76,7 @@ function LoginScreen() {
         onPress={toggleTheme}
         style={{ position: "absolute", top: 60, right: 24, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
       >
-        <Text>{mode === "light" ? "🌙" : "☀️"}</Text>
+        <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={16} color={colors.text} />
       </Pressable>
 
       <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 30, color: colors.text, marginBottom: 6 }}>
@@ -129,20 +130,22 @@ function LoginScreen() {
 
 function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll">("checkin");
+  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll">("home");
 
-  const tabs: { key: typeof tab; label: string; icon: string }[] = [
-    { key: "checkin", label: "Giriş-Çıkış", icon: "📍" },
-    { key: "shifts", label: "Vardiyam", icon: "📅" },
-    { key: "leave", label: "İzinlerim", icon: "🗓️" },
-    { key: "expense", label: "Avans", icon: "💳" },
-    { key: "tasks", label: "Görevlerim", icon: "✅" },
-    { key: "payroll", label: "Bordrom", icon: "🧾" },
+  const tabs: { key: typeof tab; label: string; icon: any }[] = [
+    { key: "home", label: "Ana Sayfa", icon: "home-outline" },
+    { key: "checkin", label: "Giriş-Çıkış", icon: "location-outline" },
+    { key: "shifts", label: "Vardiyam", icon: "calendar-outline" },
+    { key: "leave", label: "İzinlerim", icon: "document-text-outline" },
+    { key: "expense", label: "Avans", icon: "card-outline" },
+    { key: "tasks", label: "Görevlerim", icon: "checkbox-outline" },
+    { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
   ];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <View style={{ flex: 1 }}>
+        {tab === "home" && <HomeScreen />}
         {tab === "checkin" && <CheckInScreen />}
         {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
@@ -173,7 +176,7 @@ function MainTabs() {
                   backgroundColor: active ? colors.accent : "transparent",
                 }}
               >
-                <Text style={{ fontSize: 14 }}>{t.icon}</Text>
+                <Ionicons name={t.icon} size={16} color={active ? colors.accentContrast : colors.textSecondary} />
                 <Text
                   style={{
                     color: active ? colors.accentContrast : colors.textSecondary,
@@ -188,7 +191,7 @@ function MainTabs() {
           })}
         </ScrollView>
         <Pressable onPress={toggleTheme} style={{ paddingHorizontal: 14 }}>
-          <Text style={{ fontSize: 16 }}>{mode === "light" ? "🌙" : "☀️"}</Text>
+          <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={18} color={colors.text} />
         </Pressable>
       </View>
     </View>
@@ -274,7 +277,142 @@ function CheckInScreen() {
     </View>
   );
 }
+function HomeScreen() {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const [loading, setLoading] = useState(true);
+  const [fullName, setFullName] = useState("");
+  const [isManager, setIsManager] = useState(false);
+  const [stats, setStats] = useState<any>({});
 
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, company_id")
+      .eq("id", userId)
+      .single();
+    setFullName(profile?.full_name ?? "");
+
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("roles(code)")
+      .eq("user_id", userId)
+      .eq("company_id", profile?.company_id);
+    const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+    const managerRoles = ["company_admin", "store_manager", "regional_manager"];
+    const managerFlag = roleCodes.some((r: string) => managerRoles.includes(r));
+    setIsManager(managerFlag);
+
+    if (managerFlag) {
+      const { count: employeeCount } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", profile?.company_id);
+
+      const todayStart = new Date().toISOString().slice(0, 10);
+      const { data: todayCheckins } = await supabase
+        .from("attendance_logs")
+        .select("user_id")
+        .eq("company_id", profile?.company_id)
+        .eq("event_type", "check_in")
+        .gte("event_time", todayStart);
+      const activeToday = new Set((todayCheckins ?? []).map((c: any) => c.user_id)).size;
+
+      const { count: pendingLeave } = await supabase
+        .from("leave_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", profile?.company_id)
+        .eq("status", "pending");
+
+      const { count: pendingTasks } = await supabase
+        .from("task_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", profile?.company_id)
+        .neq("status", "completed");
+
+      setStats({ employeeCount: employeeCount ?? 0, activeToday, pendingLeave: pendingLeave ?? 0, pendingTasks: pendingTasks ?? 0 });
+    } else {
+      const periodStart = new Date().toISOString().slice(0, 7) + "-01";
+      const { data: balanceData } = await supabase.rpc("get_leave_balances", { p_user_id: userId });
+      const remainingTotal = (balanceData ?? []).reduce((sum: number, b: any) => sum + (b.remaining_days ?? 0), 0);
+
+      const { data: checkins } = await supabase
+        .from("attendance_logs")
+        .select("event_time")
+        .eq("user_id", userId)
+        .eq("event_type", "check_in")
+        .gte("event_time", periodStart);
+      const workedDays = new Set((checkins ?? []).map((c: any) => c.event_time.slice(0, 10))).size;
+
+      const { count: pendingTasks } = await supabase
+        .from("task_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("assigned_to", userId)
+        .neq("status", "completed");
+
+      setStats({ workedDays, remainingTotal, pendingTasks: pendingTasks ?? 0 });
+    }
+    setLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 14 }}>Hoş geldin,</Text>
+      <Text style={styles.title}>{fullName}</Text>
+
+      {isManager ? (
+        <View style={homeStyles.grid}>
+          <StatCard colors={colors} icon="people-outline" label="Toplam Personel" value={stats.employeeCount} />
+          <StatCard colors={colors} icon="checkmark-circle-outline" label="Bugün Aktif" value={stats.activeToday} accent={colors.success} />
+          <StatCard colors={colors} icon="document-text-outline" label="Bekleyen İzin Talebi" value={stats.pendingLeave} />
+          <StatCard colors={colors} icon="checkbox-outline" label="Bekleyen Görev" value={stats.pendingTasks} />
+        </View>
+      ) : (
+        <View style={homeStyles.grid}>
+          <StatCard colors={colors} icon="calendar-outline" label="Bu Ay Çalışılan Gün" value={stats.workedDays} />
+          <StatCard colors={colors} icon="document-text-outline" label="Kalan İzin (Toplam)" value={stats.remainingTotal} accent={colors.success} />
+          <StatCard colors={colors} icon="checkbox-outline" label="Bekleyen Görevin" value={stats.pendingTasks} />
+        </View>
+      )}
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+function StatCard({ colors, icon, label, value, accent }: { colors: ThemeColors; icon: any; label: string; value: number | undefined; accent?: string }) {
+  return (
+    <View style={[homeStyles.card, { borderColor: colors.border, backgroundColor: colors.bgElevated }]}>
+      <Ionicons name={icon} size={20} color={accent ?? colors.accent} />
+      <Text style={{ fontFamily: "IBMPlexMono_400Regular", fontSize: 26, color: colors.text, marginTop: 10 }}>
+        {value ?? 0}
+      </Text>
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const homeStyles = StyleSheet.create({
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 24 },
+  card: { width: "47%", borderWidth: 1, borderRadius: 14, padding: 16 },
+});
 function WeeklyShiftsScreen() {
   const [shifts, setShifts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -683,7 +821,7 @@ function TasksScreen() {
         <Text style={styles.title}>{selectedTask.checklist_templates?.title}</Text>
         {items.map((item) => (
           <Pressable key={item.id} onPress={() => toggleItem(item.id)} style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 10 }]}>
-            <Text style={{ fontSize: 18 }}>{results[item.id] ? "☑" : "☐"}</Text>
+            <Ionicons name={results[item.id] ? "checkbox" : "square-outline"} size={20} color={results[item.id] ? colors.success : colors.textSecondary} />
             <Text style={{ color: colors.text, fontFamily: "Inter_400Regular", flex: 1 }}>{item.label}</Text>
           </Pressable>
         ))}

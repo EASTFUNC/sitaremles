@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import RotatingQrCode from "@/components/RotatingQrCode";
 
 export default async function BranchesPage() {
   const supabase = await createClient();
@@ -97,35 +98,31 @@ export default async function BranchesPage() {
       <h3>Mevcut Şubeler</h3>
       <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
         Bu QR kodları şube girişine asılabilir/ekranda gösterilebilir. Personel telefonuyla okutarak
-        giriş-çıkış yapar.
+        giriş-çıkış yapar. Her 5 saniyede bir otomatik yenilenir.
       </p>
-      {branches?.map((b) => {
-        const payload = JSON.stringify({ branch_id: b.id });
-        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(payload)}`;
-        return (
-          <div
-            key={b.id}
-            style={{
-              display: "flex",
-              gap: 20,
-              alignItems: "center",
-              padding: 16,
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              background: "var(--bg-elevated)",
-              marginBottom: 12,
-            }}
-          >
-            <img src={qrImageUrl} alt={`${b.name} QR kodu`} width={100} height={100} style={{ borderRadius: 8 }} />
-            <div>
-              <strong style={{ fontFamily: "var(--font-display)" }}>{b.name}</strong>
-              <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0" }}>
-                {b.latitude}, {b.longitude} · Yarıçap: {b.geofence_radius_meters}m
-              </p>
-            </div>
+      {branches?.map((b) => (
+        <div
+          key={b.id}
+          style={{
+            display: "flex",
+            gap: 20,
+            alignItems: "center",
+            padding: 16,
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            background: "var(--bg-elevated)",
+            marginBottom: 12,
+          }}
+        >
+          <RotatingQrCode branchId={b.id} branchName={b.name} />
+          <div>
+            <strong style={{ fontFamily: "var(--font-display)" }}>{b.name}</strong>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0" }}>
+              {b.latitude}, {b.longitude} · Yarıçap: {b.geofence_radius_meters}m
+            </p>
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
