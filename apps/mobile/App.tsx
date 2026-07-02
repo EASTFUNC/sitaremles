@@ -130,7 +130,8 @@ function LoginScreen() {
 
 function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll">("home");
+  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications">("home");
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const tabs: { key: typeof tab; label: string; icon: any }[] = [
     { key: "home", label: "Ana Sayfa", icon: "home-outline" },
@@ -142,8 +143,39 @@ function MainTabs() {
     { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
   ];
 
+  const currentLabel = tab === "notifications" ? "Bildirimler" : tabs.find((t) => t.key === tab)?.label ?? "";
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingTop: 50,
+          paddingHorizontal: 16,
+          paddingBottom: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+          backgroundColor: colors.bgElevated,
+        }}
+      >
+        <Pressable onPress={() => setDrawerOpen(true)} hitSlop={10}>
+          <Ionicons name="menu-outline" size={24} color={colors.text} />
+        </Pressable>
+        <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 16, color: colors.text }}>
+          {currentLabel}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 16 }}>
+          <Pressable onPress={() => setTab("notifications")} hitSlop={10}>
+            <NotificationBellButton colors={colors} />
+          </Pressable>
+          <Pressable onPress={toggleTheme} hitSlop={10}>
+            <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={18} color={colors.text} />
+          </Pressable>
+        </View>
+      </View>
+
       <View style={{ flex: 1 }}>
         {tab === "home" && <HomeScreen />}
         {tab === "checkin" && <CheckInScreen />}
@@ -152,48 +184,62 @@ function MainTabs() {
         {tab === "expense" && <ExpenseRequestScreen />}
         {tab === "tasks" && <TasksScreen />}
         {tab === "payroll" && <PayrollScreen />}
+        {tab === "notifications" && <NotificationsScreen />}
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bgElevated }}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 10, paddingVertical: 10, gap: 6, alignItems: "center" }}
-        >
-          {tabs.map((t) => {
-            const active = tab === t.key;
-            return (
-              <Pressable
-                key={t.key}
-                onPress={() => setTab(t.key)}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
-                  borderRadius: 20,
-                  backgroundColor: active ? colors.accent : "transparent",
-                }}
-              >
-                <Ionicons name={t.icon} size={16} color={active ? colors.accentContrast : colors.textSecondary} />
-                <Text
+
+      {drawerOpen && (
+        <>
+          <Pressable
+            onPress={() => setDrawerOpen(false)}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.4)" }}
+          />
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              bottom: 0,
+              width: 240,
+              backgroundColor: colors.bgElevated,
+              borderRightWidth: 1,
+              borderRightColor: colors.border,
+              paddingTop: 60,
+              paddingHorizontal: 12,
+            }}
+          >
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 18, color: colors.text, paddingHorizontal: 8, marginBottom: 20 }}>
+              SITAREMLES
+            </Text>
+            {tabs.map((t) => {
+              const active = tab === t.key;
+              return (
+                <Pressable
+                  key={t.key}
+                  onPress={() => {
+                    setTab(t.key);
+                    setDrawerOpen(false);
+                  }}
                   style={{
-                    color: active ? colors.accentContrast : colors.textSecondary,
-                    fontFamily: active ? "Inter_600SemiBold" : "Inter_400Regular",
-                    fontSize: 13,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    paddingVertical: 10,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: active ? colors.accent : "transparent",
+                    marginBottom: 4,
                   }}
                 >
-                  {t.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <Pressable onPress={toggleTheme} style={{ paddingHorizontal: 14 }}>
-          <Ionicons name={mode === "light" ? "moon-outline" : "sunny-outline"} size={18} color={colors.text} />
-        </Pressable>
-      </View>
+                  <Ionicons name={t.icon} size={18} color={active ? colors.accentContrast : colors.text} />
+                  <Text style={{ color: active ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 14 }}>
+                    {t.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -413,6 +459,107 @@ const homeStyles = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 24 },
   card: { width: "47%", borderWidth: 1, borderRadius: 14, padding: 16 },
 });
+function NotificationBellButton({ colors }: { colors: ThemeColors }) {
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function load() {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { count } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userData.user.id)
+      .eq("is_read", false);
+    setUnreadCount(count ?? 0);
+  }
+
+  return (
+    <View style={{ position: "relative" }}>
+      <Ionicons name="notifications-outline" size={18} color={colors.text} />
+      {unreadCount > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -6,
+            backgroundColor: "#D64545",
+            borderRadius: 8,
+            minWidth: 16,
+            height: 16,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 3,
+          }}
+        >
+          <Text style={{ color: "white", fontSize: 9, fontFamily: "Inter_600SemiBold" }}>{unreadCount}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function NotificationsScreen() {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from("notifications")
+      .select("id, title, body, is_read, created_at")
+      .eq("user_id", userData.user?.id)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    setNotifications(data ?? []);
+    setLoading(false);
+  }
+
+  async function markAsRead(id: string) {
+    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    load();
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Bildirimler</Text>
+      <FlatList
+        data={notifications}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Pressable onPress={() => !item.is_read && markAsRead(item.id)} style={styles.card}>
+            <Text style={[styles.cardTitle, !item.is_read && { color: colors.accent }]}>{item.title}</Text>
+            <Text style={styles.cardText}>{item.body}</Text>
+            <Text style={{ fontSize: 10, color: colors.textSecondary, fontFamily: "IBMPlexMono_400Regular", marginTop: 4 }}>
+              {new Date(item.created_at).toLocaleString("tr-TR")}
+            </Text>
+          </Pressable>
+        )}
+        ListEmptyComponent={<Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz bildirim yok.</Text>}
+      />
+    </View>
+  );
+}
 function WeeklyShiftsScreen() {
   const [shifts, setShifts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
