@@ -4,8 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const managerRoles = ["company_admin", "store_manager", "regional_manager"];
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  roles: string[] | null | "super_admin_only";
+};
 
-const navItems = [
+const navItems: NavItem[] = [
   { href: "/dashboard", label: "Genel Bakış", icon: "🏠", roles: null },
   { href: "/dashboard/employees", label: "Personel Listesi", icon: "👤", roles: managerRoles },
   { href: "/dashboard/shifts", label: "Vardiya Planlama", icon: "📅", roles: managerRoles },
