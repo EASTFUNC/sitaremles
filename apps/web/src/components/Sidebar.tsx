@@ -15,6 +15,7 @@ const navItems = [
   { href: "/dashboard/tasks", label: "Görev / Denetim", icon: "✅", roles: managerRoles },
   { href: "/dashboard/payroll", label: "Bordro / Puantaj", icon: "🧾", roles: managerRoles },
   { href: "/dashboard/ai-usage", label: "AI Kullanım", icon: "🤖", roles: ["company_admin"] },
+  { href: "/dashboard/settings", label: "Şirket Ayarları", icon: "⚙️", roles: ["company_admin"] },
   { href: "/dashboard/super-admin", label: "Süper Admin", icon: "🛡️", roles: "super_admin_only" },
 ];
 
