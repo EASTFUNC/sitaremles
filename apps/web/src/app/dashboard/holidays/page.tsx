@@ -83,7 +83,7 @@ export default async function HolidaysPage() {
           </label>
           <label style={labelStyle}>
             <span style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 20 }}>
-              <input type="checkbox" name="counts_as_annual_leave" defaultChecked />
+              <input type="checkbox" name="counts_as_annual_leave" />
               Yıllık izinden düşülsün
             </span>
           </label>
