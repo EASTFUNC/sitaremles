@@ -7,6 +7,7 @@ const managerRoles = ["company_admin", "store_manager", "regional_manager"];
 
 const navItems = [
   { href: "/dashboard", label: "Genel Bakış", icon: "🏠", roles: null },
+  { href: "/dashboard/employees", label: "Personel Listesi", icon: "👤", roles: managerRoles },
   { href: "/dashboard/shifts", label: "Vardiya Planlama", icon: "📅", roles: managerRoles },
   { href: "/dashboard/attendance", label: "Giriş-Çıkış Raporu", icon: "📍", roles: managerRoles },
   { href: "/dashboard/branches/qr", label: "Şube QR Kodları", icon: "🔗", roles: managerRoles },
