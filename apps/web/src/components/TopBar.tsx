@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
 import { createClient } from "@/lib/supabase-browser";
+import NotificationBell from "./NotificationBell";
 
 export default function TopBar({ userName }: { userName: string }) {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function TopBar({ userName }: { userName: string }) {
       }}
     >
       <span style={{ fontSize: 14, color: "var(--text-secondary)" }}>{userName}</span>
-      <ThemeToggle />
+      <NotificationBell />
       <button
         onClick={handleSignOut}
         style={{
