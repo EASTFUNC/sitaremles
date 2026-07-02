@@ -44,6 +44,15 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const uploadedMap: Record<string, any> = {};
   uploadedDocs?.forEach((d) => (uploadedMap[d.document_type_id] = d));
 
+  async function updateStatus(formData: FormData) {
+    "use server";
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
+    await supabase.from("profiles").update({ status: formData.get("status") as string }).eq("id", id);
+    revalidatePath(`/dashboard/employees/${id}`);
+  }
+
   async function saveLegalDetails(formData: FormData) {
     "use server";
     const supabase = await createClient();
@@ -108,6 +117,30 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", fontFamily: "var(--font-body)" }}>
       <h1>{employee?.full_name} — Özlük Dosyası</h1>
+
+      {isAdmin && (
+        <form action={updateStatus} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20 }}>
+          <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Çalışma Durumu:</span>
+          <select
+            name="status"
+            defaultValue={employee?.status}
+            style={{ padding: 6, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text)" }}
+          >
+            <option value="application">Başvuru</option>
+            <option value="onboarding">İşe Alım Süreci</option>
+            <option value="active">Çalışıyor</option>
+            <option value="on_leave">İzinli</option>
+            <option value="terminated">Ayrıldı</option>
+            <option value="blacklisted">Kara Liste</option>
+          </select>
+          <button
+            type="submit"
+            style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text)", cursor: "pointer", fontSize: 12 }}
+          >
+            Güncelle
+          </button>
+        </form>
+      )}
 
       {isAdmin ? (
         <form

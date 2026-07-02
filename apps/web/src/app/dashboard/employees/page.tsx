@@ -20,9 +20,12 @@ export default async function EmployeesPage() {
     .order("full_name");
 
   const statusLabels: Record<string, string> = {
+    application: "Başvuru",
+    onboarding: "İşe Alım Süreci",
     active: "Çalışıyor",
     on_leave: "İzinli",
     terminated: "Ayrıldı",
+    blacklisted: "Kara Liste",
   };
 
   return (
