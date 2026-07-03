@@ -1,6 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const { company_id } = await req.json();
     const authHeader = req.headers.get("Authorization")!;
@@ -28,9 +37,15 @@ Deno.serve(async (req) => {
     if (fetchError) throw fetchError;
 
     if (!suspiciousLogs || suspiciousLogs.length === 0) {
+      await supabase.from("ai_agent_runs").insert({
+        company_id,
+        agent_name: "audit_agent",
+        status: "success",
+        summary: "Şüpheli hareket tespit edilmedi",
+      });
       return new Response(
         JSON.stringify({ success: true, flagged_count: flaggedCount, summary: "Şüpheli hareket tespit edilmedi." }),
-        { headers: { "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -50,22 +65,24 @@ Deno.serve(async (req) => {
     );
     const geminiData = await geminiResponse.json();
     const summary = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "Özet oluşturulamadı.";
-await supabase.from("ai_agent_runs").insert({
+
+    await supabase.from("ai_agent_runs").insert({
       company_id,
       agent_name: "audit_agent",
       status: "success",
       summary: `${flaggedCount} yeni kayıt işaretlendi`,
     });
+
     return new Response(
       JSON.stringify({ success: true, flagged_count: flaggedCount, summary, records: suspiciousLogs }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
     console.error("Audit agent error:", e);
     const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

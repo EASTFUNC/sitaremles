@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import Link from "next/link";
+import { Sparkles, ShieldAlert, MessageSquare, ArrowRight } from "lucide-react";
 
 export default async function AiUsagePage() {
   const supabase = await createClient();
@@ -12,62 +14,86 @@ export default async function AiUsagePage() {
     .eq("id", user.id)
     .single();
 
-  const { data: runs } = await supabase
-    .from("ai_agent_runs")
-    .select("id, agent_name, status, summary, created_at")
-    .eq("company_id", profile?.company_id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+  const companyId = profile?.company_id;
 
   const today = new Date().toISOString().slice(0, 10);
-  const todayRuns = runs?.filter((r) => r.created_at.startsWith(today)) ?? [];
+  const { data: todayRuns } = await supabase
+    .from("ai_agent_runs")
+    .select("agent_name")
+    .eq("company_id", companyId)
+    .gte("created_at", today);
 
-  const agentLabels: Record<string, string> = {
-    hr_insights_agent: "🧠 HR Insights Agent",
-    audit_agent: "🔍 Audit Agent",
-    shift_agent: "🤖 Shift Agent",
-  };
+  const counts: Record<string, number> = { shift_agent: 0, audit_agent: 0, hr_insights_agent: 0 };
+  todayRuns?.forEach((r) => {
+    if (counts[r.agent_name] !== undefined) counts[r.agent_name]++;
+  });
+
+  const agents = [
+    {
+      href: "/dashboard/ai-usage/shift-agent",
+      icon: Sparkles,
+      name: "Shift Agent",
+      desc: "Kısıtlara ve tercihlere göre otomatik vardiya taslağı üretir.",
+      count: counts.shift_agent,
+    },
+    {
+      href: "/dashboard/ai-usage/audit-agent",
+      icon: ShieldAlert,
+      name: "Audit Agent",
+      desc: "Şüpheli giriş-çıkış hareketlerini tespit edip özetler.",
+      count: counts.audit_agent,
+    },
+    {
+      href: "/dashboard/ai-usage/hr-insights-agent",
+      icon: MessageSquare,
+      name: "HR Insights Agent",
+      desc: "Doğal dilde sorular sorup analitik cevaplar alın.",
+      count: counts.hr_insights_agent,
+    },
+  ];
 
   return (
-    <div style={{ maxWidth: 800, margin: "60px auto", fontFamily: "sans-serif" }}>
-      <h1>AI Kullanım Paneli</h1>
+    <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
+      <h1 style={{ marginBottom: 4 }}>AI Ajanları</h1>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 24 }}>
+        Bugün toplam {(todayRuns ?? []).length} çağrı yapıldı.
+      </p>
 
-      <div style={{ padding: 16, border: "1px solid #4a90e2", marginBottom: 24 }}>
-        <strong>Bugünkü toplam çağrı: {todayRuns.length}</strong>
-        <p style={{ fontSize: 13, color: "#999" }}>
-          Ücretsiz Gemini katmanında günlük limit modele göre değişir (yaklaşık 250-1500 istek).
-          Bu sayı limite yaklaşırsa Google Cloud faturalandırmasını açmayı düşünmelisin.
-        </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+        {agents.map((a) => (
+          <Link key={a.href} href={a.href} style={{ textDecoration: "none", color: "inherit" }}>
+            <div style={cardStyle}>
+              <div style={iconBadgeStyle}>
+                <a.icon size={18} color="var(--accent)" strokeWidth={1.75} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14 }}>
+                <strong style={{ fontFamily: "var(--font-display)", fontSize: 15 }}>{a.name}</strong>
+                <ArrowRight size={14} color="var(--text-secondary)" strokeWidth={1.75} />
+              </div>
+              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", marginTop: 6, lineHeight: 1.5 }}>{a.desc}</p>
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginTop: 10 }}>
+                Bugün {a.count} çağrı
+              </div>
+            </div>
+          </Link>
+        ))}
       </div>
-
-      <h3>Son 50 Çağrı</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={cellStyle}>Zaman</th>
-            <th style={cellStyle}>Ajan</th>
-            <th style={cellStyle}>Durum</th>
-            <th style={cellStyle}>Özet</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs?.map((r) => (
-            <tr key={r.id}>
-              <td style={cellStyle}>{new Date(r.created_at).toLocaleString("tr-TR")}</td>
-              <td style={cellStyle}>{agentLabels[r.agent_name] ?? r.agent_name}</td>
-              <td style={cellStyle}>{r.status === "success" ? "✓" : "✗"}</td>
-              <td style={cellStyle}>{r.summary}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {(!runs || runs.length === 0) && <p>Henüz AI çağrısı yapılmadı.</p>}
     </div>
   );
 }
 
-const cellStyle: React.CSSProperties = {
-  textAlign: "left",
-  borderBottom: "1px solid #333",
-  padding: "8px 6px",
+const cardStyle: React.CSSProperties = {
+  padding: 20,
+  border: "1px solid var(--border)",
+  borderRadius: 16,
+  background: "var(--bg-elevated)",
+};
+const iconBadgeStyle: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 10,
+  background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };

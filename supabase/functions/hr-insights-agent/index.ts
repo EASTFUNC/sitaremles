@@ -1,6 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const { company_id, question } = await req.json();
     const authHeader = req.headers.get("Authorization")!;
@@ -12,8 +21,6 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    // Adım 1: Gemini'ye hangi aracı (fonksiyonu) çağırması gerektiğini SORUYORUZ,
-    // ama company_id'yi ASLA Gemini'den almıyoruz - biz kendimiz enjekte ediyoruz.
     const tools = [
       {
         function_declarations: [
@@ -46,11 +53,10 @@ Deno.serve(async (req) => {
     if (!functionCall) {
       return new Response(
         JSON.stringify({ success: true, answer: "Bu soruyu şu an yanıtlayamıyorum. Şube verimliliği veya izin durumu hakkında sorabilirsin." }),
-        { headers: { "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Adım 2: Gemini'nin seçtiği fonksiyonu, company_id'yi BİZ ekleyerek çağırıyoruz
     let toolResult;
     if (functionCall.name === "get_branch_efficiency") {
       const { data, error } = await supabase.rpc("get_branch_efficiency", { p_company_id: company_id });
@@ -62,7 +68,6 @@ Deno.serve(async (req) => {
       toolResult = data;
     }
 
-    // Adım 3: Gerçek veriyi Gemini'ye geri verip doğal dilde yorumlatıyoruz
     const summaryPrompt = `Kullanıcı şunu sordu: "${question}"\n\nVeritabanından gelen gerçek veri:\n${JSON.stringify(toolResult)}\n\nBu veriye dayanarak, sadece verilen sayılara dayanan, kısa ve net bir Türkçe cevap ver. Veride olmayan hiçbir şey uydurma.`;
 
     const finalResponse = await fetch(
@@ -75,22 +80,24 @@ Deno.serve(async (req) => {
     );
     const finalData = await finalResponse.json();
     const answer = finalData.candidates?.[0]?.content?.parts?.[0]?.text ?? "Cevap oluşturulamadı.";
-await supabase.from("ai_agent_runs").insert({
+
+    await supabase.from("ai_agent_runs").insert({
       company_id,
       agent_name: "hr_insights_agent",
       status: "success",
       summary: question,
     });
+
     return new Response(
       JSON.stringify({ success: true, answer, raw_data: toolResult }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
     console.error("HR insights agent error:", e);
     const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

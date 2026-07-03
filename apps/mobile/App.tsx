@@ -132,7 +132,7 @@ function LoginScreen() {
 
 function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications">("home");
+  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai">("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const tabs: { key: typeof tab; label: string; icon: any }[] = [
@@ -143,6 +143,7 @@ function MainTabs() {
     { key: "expense", label: "Avans", icon: "card-outline" },
     { key: "tasks", label: "Görevlerim", icon: "checkbox-outline" },
     { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
+    { key: "ai", label: "AI Ajanları", icon: "sparkles-outline" },
   ];
 
   const currentLabel = tab === "notifications" ? "Bildirimler" : tabs.find((t) => t.key === tab)?.label ?? "";
@@ -187,6 +188,7 @@ function MainTabs() {
         {tab === "tasks" && <TasksScreen />}
         {tab === "payroll" && <PayrollScreen />}
         {tab === "notifications" && <NotificationsScreen />}
+        {tab === "ai" && <AiAgentsScreen />}
       </View>
 
       {drawerOpen && (
@@ -1087,7 +1089,286 @@ function PayrollScreen() {
     </View>
   );
 }
+function AiAgentsScreen() {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const [loading, setLoading] = useState(true);
+  const [isManager, setIsManager] = useState(false);
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<"shift" | "audit" | "hr" | null>(null);
 
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+    setCompanyId(profile?.company_id ?? null);
+
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("roles(code)")
+      .eq("user_id", userId)
+      .eq("company_id", profile?.company_id);
+    const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+    const managerRoles = ["company_admin", "store_manager", "regional_manager"];
+    setIsManager(roleCodes.some((r: string) => managerRoles.includes(r)));
+    setLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  if (!isManager || !companyId) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>AI Ajanları</Text>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>
+          Bu özellik sadece yöneticiler içindir.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>AI Ajanları</Text>
+
+      <AgentSection
+        title="Shift Agent"
+        icon="sparkles-outline"
+        expanded={expanded === "shift"}
+        onToggle={() => setExpanded(expanded === "shift" ? null : "shift")}
+        colors={colors}
+      >
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, lineHeight: 19 }}>
+          Otomatik vardiya taslağı üretir. Bu ajan web panelindeki Vardiya Planlama sayfasından
+          kullanılabilir.
+        </Text>
+      </AgentSection>
+
+      <AgentSection
+        title="Audit Agent"
+        icon="shield-outline"
+        expanded={expanded === "audit"}
+        onToggle={() => setExpanded(expanded === "audit" ? null : "audit")}
+        colors={colors}
+      >
+        <AuditAgentPanel companyId={companyId} colors={colors} />
+      </AgentSection>
+
+      <AgentSection
+        title="HR Insights Agent"
+        icon="chatbubble-outline"
+        expanded={expanded === "hr"}
+        onToggle={() => setExpanded(expanded === "hr" ? null : "hr")}
+        colors={colors}
+      >
+        <HrInsightsPanel companyId={companyId} colors={colors} />
+      </AgentSection>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+function AgentSection({
+  title,
+  icon,
+  expanded,
+  onToggle,
+  colors,
+  children,
+}: {
+  title: string;
+  icon: any;
+  expanded: boolean;
+  onToggle: () => void;
+  colors: ThemeColors;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 14, backgroundColor: colors.bgElevated, marginBottom: 12, overflow: "hidden" }}>
+      <Pressable
+        onPress={onToggle}
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 14 }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Ionicons name={icon} size={18} color={colors.accent} />
+          <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 14, color: colors.text }}>{title}</Text>
+        </View>
+        <Ionicons name={expanded ? "chevron-up-outline" : "chevron-down-outline"} size={16} color={colors.textSecondary} />
+      </Pressable>
+      {expanded && <View style={{ padding: 14, paddingTop: 0 }}>{children}</View>}
+    </View>
+  );
+}
+
+function AuditAgentPanel({ companyId, colors }: { companyId: string; colors: ThemeColors }) {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ flagged_count: number; summary: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function runCheck() {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    try {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/audit-agent`, {
+        method: "POST",
+        headers: {
+          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResult({ flagged_count: data.flagged_count, summary: data.summary });
+      } else {
+        setError(data.error ?? "Bilinmeyen hata");
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View>
+      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginBottom: 10, lineHeight: 19 }}>
+        Şüpheli giriş-çıkış hareketlerini tespit edip özetler.
+      </Text>
+      <AppButton title={loading ? "Kontrol Ediliyor..." : "Şimdi Kontrol Et"} onPress={runCheck} loading={loading} />
+      {result && (
+        <View style={{ marginTop: 12, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 13, color: colors.text }}>
+            {result.flagged_count} yeni kayıt işaretlendi
+          </Text>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12.5, color: colors.textSecondary, marginTop: 6, lineHeight: 18 }}>
+            {result.summary}
+          </Text>
+        </View>
+      )}
+      {error && (
+        <Text style={{ color: "#D64545", fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 10 }}>Hata: {error}</Text>
+      )}
+    </View>
+  );
+}
+
+function HrInsightsPanel({ companyId, colors }: { companyId: string; colors: ThemeColors }) {
+  const [question, setQuestion] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<{ question: string; answer: string }[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  async function askQuestion() {
+    if (!question.trim()) return;
+    setLoading(true);
+    setError(null);
+    const currentQuestion = question;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+
+    try {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/hr-insights-agent`, {
+        method: "POST",
+        headers: {
+          apikey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ company_id: companyId, question: currentQuestion }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setHistory((h) => [{ question: currentQuestion, answer: data.answer }, ...h]);
+        setQuestion("");
+      } else {
+        setError(data.error ?? "Bilinmeyen hata");
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View>
+      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginBottom: 10, lineHeight: 19 }}>
+        Doğal dilde sorular sorup analitik cevaplar alın.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <TextInput
+          value={question}
+          onChangeText={setQuestion}
+          placeholder="Örn. Hangi şubede en çok şüpheli giriş var?"
+          placeholderTextColor={colors.textSecondary}
+          style={{
+            flex: 1,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.bg,
+            color: colors.text,
+            borderRadius: 10,
+            padding: 10,
+            fontFamily: "Inter_400Regular",
+            fontSize: 13,
+          }}
+        />
+        <Pressable
+          onPress={askQuestion}
+          disabled={loading || !question.trim()}
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 10,
+            backgroundColor: colors.accent,
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: loading || !question.trim() ? 0.5 : 1,
+          }}
+        >
+          <Ionicons name="send" size={16} color={colors.accentContrast} />
+        </Pressable>
+      </View>
+
+      {error && (
+        <Text style={{ color: "#D64545", fontFamily: "Inter_400Regular", fontSize: 12.5, marginTop: 10 }}>Hata: {error}</Text>
+      )}
+
+      {history.map((ex, i) => (
+        <View key={i} style={{ marginTop: 12, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: 10 }}>
+          <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 12.5, color: colors.text }}>{ex.question}</Text>
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12.5, color: colors.textSecondary, marginTop: 6, lineHeight: 18 }}>
+            {ex.answer}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, paddingTop: 70, paddingHorizontal: 20, backgroundColor: colors.bg },
