@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import ShiftMatrix from "@/components/ShiftMatrix";
 import { Sparkles, Hourglass, Check, X } from "lucide-react";
+import FormModal from "@/components/FormModal";
 
 export default async function ShiftsPage() {
   const supabase = await createClient();
@@ -93,27 +94,25 @@ export default async function ShiftsPage() {
 
       <ShiftMatrix />
 
-      <details style={aiFormStyle}>
-        <summary style={aiSummaryStyle}>
-          <Sparkles size={15} strokeWidth={2} style={{ display: "inline", verticalAlign: -2, marginRight: 6, color: "var(--accent)" }} />
-          Akıllı Plan Oluştur
-        </summary>
-        <form action={runShiftAgent} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14, maxWidth: 480 }}>
-          <label style={labelStyle}>
-            Şube
-            <select name="branch_id" required style={inputStyle}>
-              {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </label>
-          <label style={labelStyle}>
-            Haftanın Başlangıcı (Pazartesi)
-            <input type="date" name="week_start" required style={inputStyle} />
-          </label>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <button type="submit" style={saveButtonStyle}>Taslak Plan Oluştur</button>
-          </div>
-        </form>
-      </details>
+      <div style={{ marginTop: 28 }}>
+        <FormModal triggerLabel="Akıllı Plan Oluştur" icon={<Sparkles size={14} strokeWidth={2} />} title="Akıllı Plan Oluştur">
+          <form action={runShiftAgent} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <label style={labelStyle}>
+              Şube
+              <select name="branch_id" required style={inputStyle}>
+                {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              Haftanın Başlangıcı (Pazartesi)
+              <input type="date" name="week_start" required style={inputStyle} />
+            </label>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <button type="submit" style={saveButtonStyle}>Taslak Plan Oluştur</button>
+            </div>
+          </form>
+        </FormModal>
+      </div>
 
       {draftAssignments.length > 0 && (
         <>
