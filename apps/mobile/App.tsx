@@ -8,6 +8,8 @@ import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from "@expo-google-fon
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold } from "@expo-google-fonts/inter";
 import { IBMPlexMono_400Regular } from "@expo-google-fonts/ibm-plex-mono";
 import { Ionicons } from "@expo/vector-icons";
+import { Plus } from "lucide-react-native";
+import BottomSheet from "./components/BottomSheet";
 import { supabase } from "./lib/supabase";
 import { ThemeProvider, useTheme } from "./lib/ThemeContext";
 import type { ThemeColors } from "./lib/theme";
@@ -619,6 +621,7 @@ function LeaveRequestScreen() {
   const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [sheetVisible, setSheetVisible] = useState(false);
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
@@ -648,7 +651,7 @@ function LeaveRequestScreen() {
   async function submitRequest() {
     setMessage("");
     if (!selectedTypeId || !startDate || !endDate) {
-      setMessage("Lütfen tüm alanları doldurun (tarih formatı: YYYY-AA-GG, örn. 2026-07-15).");
+      setMessage("Lütfen tüm alanları doldurun (format: YYYY-AA-GG).");
       return;
     }
     const { data: userData } = await supabase.auth.getUser();
@@ -664,9 +667,9 @@ function LeaveRequestScreen() {
     if (error) {
       setMessage(`Hata: ${error.message}`);
     } else {
-      setMessage("Talep gönderildi.");
       setStartDate("");
       setEndDate("");
+      setSheetVisible(false);
       loadData();
     }
   }
@@ -694,58 +697,68 @@ function LeaveRequestScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>İzin Talebi Oluştur</Text>
-
-      <View style={{ marginBottom: 8 }}>
-        {balances.map((b) => (
-          <Text key={b.leave_type_id} style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginBottom: 2 }}>
-            {b.leave_type_name}: {b.remaining_days} / {b.entitled_days} gün kaldı
-          </Text>
-        ))}
-      </View>
-
-      <Text style={styles.label}>İzin Türü</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-        {leaveTypes.map((t) => (
-          <Pressable
-            key={t.id}
-            onPress={() => setSelectedTypeId(t.id)}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 14,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: selectedTypeId === t.id ? colors.accent : colors.border,
-              backgroundColor: selectedTypeId === t.id ? colors.accent : "transparent",
-            }}
-          >
-            <Text style={{ color: selectedTypeId === t.id ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
-              {t.name}
-            </Text>
+    <View style={{ flex: 1 }}>
+      <ScrollView style={styles.container}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <Text style={styles.title}>İzinlerim</Text>
+          <Pressable onPress={() => setSheetVisible(true)} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgElevated }}>
+            <Plus size={14} color={colors.text} strokeWidth={2} />
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: colors.text }}>Yeni Talep</Text>
           </Pressable>
-        ))}
-      </View>
-
-      <Text style={styles.label}>Başlangıç Tarihi</Text>
-      <TextInput style={styles.input} placeholder="2026-07-15" placeholderTextColor={colors.textSecondary} value={startDate} onChangeText={setStartDate} />
-      <Text style={styles.label}>Bitiş Tarihi</Text>
-      <TextInput style={styles.input} placeholder="2026-07-18" placeholderTextColor={colors.textSecondary} value={endDate} onChangeText={setEndDate} />
-
-      <AppButton title="Talep Gönder" onPress={submitRequest} />
-      {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
-
-      <Text style={styles.subtitle}>Taleplerim</Text>
-      {myRequests.map((item) => (
-        <View key={item.id} style={styles.card}>
-          <Text style={styles.cardTitle}>{item.leave_types?.name}</Text>
-          <Text style={styles.cardText}>{item.start_date} → {item.end_date}</Text>
-          {statusBadge(item.status)}
         </View>
-      ))}
-      {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
-      <View style={{ height: 40 }} />
-    </ScrollView>
+
+        <View style={{ marginBottom: 12 }}>
+          {balances.map((b) => (
+            <Text key={b.leave_type_id} style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginBottom: 2 }}>
+              {b.leave_type_name}: {b.remaining_days} / {b.entitled_days} gün kaldı
+            </Text>
+          ))}
+        </View>
+
+        <Text style={styles.subtitle}>Taleplerim</Text>
+        {myRequests.map((item) => (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{item.leave_types?.name}</Text>
+            <Text style={styles.cardText}>{item.start_date} → {item.end_date}</Text>
+            {statusBadge(item.status)}
+          </View>
+        ))}
+        {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} title="İzin Talebi Oluştur">
+        <Text style={styles.label}>İzin Türü</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+          {leaveTypes.map((t) => (
+            <Pressable
+              key={t.id}
+              onPress={() => setSelectedTypeId(t.id)}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 14,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: selectedTypeId === t.id ? colors.accent : colors.border,
+                backgroundColor: selectedTypeId === t.id ? colors.accent : "transparent",
+              }}
+            >
+              <Text style={{ color: selectedTypeId === t.id ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+                {t.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Başlangıç Tarihi</Text>
+        <TextInput style={styles.input} placeholder="2026-07-15" placeholderTextColor={colors.textSecondary} value={startDate} onChangeText={setStartDate} />
+        <Text style={styles.label}>Bitiş Tarihi</Text>
+        <TextInput style={styles.input} placeholder="2026-07-18" placeholderTextColor={colors.textSecondary} value={endDate} onChangeText={setEndDate} />
+
+        <AppButton title="Talep Gönder" onPress={submitRequest} />
+        {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
+      </BottomSheet>
+    </View>
   );
 }
 
@@ -757,6 +770,7 @@ function ExpenseRequestScreen() {
   const [myRequests, setMyRequests] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
@@ -818,10 +832,10 @@ function ExpenseRequestScreen() {
     if (error) {
       setMessage(`Hata: ${error.message}`);
     } else {
-      setMessage("Talep gönderildi.");
       setAmount("");
       setDescription("");
       setImageUri(null);
+      setSheetVisible(false);
       loadRequests();
     }
   }
@@ -841,51 +855,61 @@ function ExpenseRequestScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Avans / Masraf Talebi</Text>
-
-      <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-        {(["advance", "expense"] as const).map((type) => (
-          <Pressable
-            key={type}
-            onPress={() => setRequestType(type)}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: requestType === type ? colors.accent : colors.border,
-              backgroundColor: requestType === type ? colors.accent : "transparent",
-            }}
-          >
-            <Text style={{ color: requestType === type ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
-              {type === "advance" ? "Avans" : "Masraf"}
-            </Text>
+    <View style={{ flex: 1 }}>
+      <ScrollView style={styles.container}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <Text style={styles.title}>Avans / Masraf</Text>
+          <Pressable onPress={() => setSheetVisible(true)} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgElevated }}>
+            <Plus size={14} color={colors.text} strokeWidth={2} />
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12.5, color: colors.text }}>Yeni Talep</Text>
           </Pressable>
-        ))}
-      </View>
-
-      <Text style={styles.label}>Tutar (₺)</Text>
-      <TextInput style={styles.input} placeholder="0" placeholderTextColor={colors.textSecondary} keyboardType="numeric" value={amount} onChangeText={setAmount} />
-      <Text style={styles.label}>Açıklama</Text>
-      <TextInput style={styles.input} placeholder="Örn. Yemek" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} />
-
-      <AppButton title={imageUri ? "Fiş Seçildi ✓" : "Fiş Fotoğrafı Seç"} onPress={pickImage} variant="secondary" />
-      <AppButton title={uploading ? "Gönderiliyor..." : "Talep Gönder"} onPress={submitRequest} disabled={uploading} />
-
-      {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
-
-      <Text style={styles.subtitle}>Taleplerim</Text>
-      {myRequests.map((item) => (
-        <View key={item.id} style={styles.card}>
-          <Text style={styles.cardTitle}>{item.request_type === "advance" ? "Avans" : "Masraf"}: {item.amount} ₺</Text>
-          <Text style={styles.cardText}>{item.description}</Text>
-          {statusBadge(item.status)}
         </View>
-      ))}
-      {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
-      <View style={{ height: 40 }} />
-    </ScrollView>
+
+        <Text style={styles.subtitle}>Taleplerim</Text>
+        {myRequests.map((item) => (
+          <View key={item.id} style={styles.card}>
+            <Text style={styles.cardTitle}>{item.request_type === "advance" ? "Avans" : "Masraf"}: {item.amount} ₺</Text>
+            <Text style={styles.cardText}>{item.description}</Text>
+            {statusBadge(item.status)}
+          </View>
+        ))}
+        {myRequests.length === 0 && <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz talebiniz yok.</Text>}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <BottomSheet visible={sheetVisible} onClose={() => setSheetVisible(false)} title="Avans / Masraf Talebi">
+        <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+          {(["advance", "expense"] as const).map((type) => (
+            <Pressable
+              key={type}
+              onPress={() => setRequestType(type)}
+              style={{
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: requestType === type ? colors.accent : colors.border,
+                backgroundColor: requestType === type ? colors.accent : "transparent",
+              }}
+            >
+              <Text style={{ color: requestType === type ? colors.accentContrast : colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+                {type === "advance" ? "Avans" : "Masraf"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Text style={styles.label}>Tutar (₺)</Text>
+        <TextInput style={styles.input} placeholder="0" placeholderTextColor={colors.textSecondary} keyboardType="numeric" value={amount} onChangeText={setAmount} />
+        <Text style={styles.label}>Açıklama</Text>
+        <TextInput style={styles.input} placeholder="Örn. Yemek" placeholderTextColor={colors.textSecondary} value={description} onChangeText={setDescription} />
+
+        <AppButton title={imageUri ? "Fiş Seçildi ✓" : "Fiş Fotoğrafı Seç"} onPress={pickImage} variant="secondary" />
+        <AppButton title={uploading ? "Gönderiliyor..." : "Talep Gönder"} onPress={submitRequest} disabled={uploading} />
+
+        {message ? <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", marginTop: 10 }}>{message}</Text> : null}
+      </BottomSheet>
+    </View>
   );
 }
 
