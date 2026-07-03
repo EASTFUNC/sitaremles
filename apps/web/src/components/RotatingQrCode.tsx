@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase-browser";
+import { RefreshCw } from "lucide-react";
 
 export default function RotatingQrCode({ branchId, branchName }: { branchId: string; branchName: string }) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
@@ -30,10 +31,32 @@ export default function RotatingQrCode({ branchId, branchName }: { branchId: str
 
   return (
     <div style={{ textAlign: "center" }}>
-      {qrUrl && <img src={qrUrl} alt={`${branchName} QR kodu`} width={140} height={140} style={{ borderRadius: 8 }} />}
-      <p style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginTop: 4 }}>
-        {secondsLeft}s içinde yenilenecek
-      </p>
+      <div
+        style={{
+          background: "#FFFFFF",
+          padding: 10,
+          borderRadius: 12,
+          display: "inline-block",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+        }}
+      >
+        {qrUrl && <img src={qrUrl} alt={`${branchName} QR kodu`} width={130} height={130} style={{ display: "block" }} />}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 5,
+          marginTop: 8,
+          fontSize: 11,
+          color: "var(--text-secondary)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        <RefreshCw size={11} strokeWidth={2} />
+        <span>{secondsLeft}s</span>
+      </div>
     </div>
   );
 }

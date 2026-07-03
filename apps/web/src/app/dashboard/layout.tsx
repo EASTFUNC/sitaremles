@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
+import Script from "next/script";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();

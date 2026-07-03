@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import ShiftMatrix from "@/components/ShiftMatrix";
+import { Sparkles, Hourglass, Check, X } from "lucide-react";
 
 export default async function ShiftsPage() {
   const supabase = await createClient();
@@ -86,45 +87,63 @@ export default async function ShiftsPage() {
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", fontFamily: "var(--font-body)" }}>
       <h1>Vardiya Planlama</h1>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -8, marginBottom: 24 }}>
+        Hücrelere tıklayarak manuel vardiya atayın veya AI ajanını kullanarak taslak plan oluşturun.
+      </p>
 
       <ShiftMatrix />
 
-      <form
-        action={runShiftAgent}
-        style={{ marginTop: 32, marginBottom: 24, padding: 16, border: "1px solid var(--accent)", borderRadius: 12, background: "var(--bg-elevated)" }}
-      >
-        <h3 style={{ marginTop: 0 }}>🤖 Akıllı Plan Oluştur (Shift Agent)</h3>
-        <label>Şube:</label>
-        <select name="branch_id" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}>
-          {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <label>Haftanın Başlangıç Tarihi (Pazartesi):</label>
-        <input type="date" name="week_start" required style={{ display: "block", width: "100%", marginBottom: 12, padding: 6 }} />
-        <button type="submit" style={{ padding: "8px 16px" }}>Taslak Plan Oluştur</button>
-      </form>
+      <details style={aiFormStyle}>
+        <summary style={aiSummaryStyle}>
+          <Sparkles size={15} strokeWidth={2} style={{ display: "inline", verticalAlign: -2, marginRight: 6, color: "var(--accent)" }} />
+          Akıllı Plan Oluştur
+        </summary>
+        <form action={runShiftAgent} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14, maxWidth: 480 }}>
+          <label style={labelStyle}>
+            Şube
+            <select name="branch_id" required style={inputStyle}>
+              {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </label>
+          <label style={labelStyle}>
+            Haftanın Başlangıcı (Pazartesi)
+            <input type="date" name="week_start" required style={inputStyle} />
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <button type="submit" style={saveButtonStyle}>Taslak Plan Oluştur</button>
+          </div>
+        </form>
+      </details>
 
       {draftAssignments.length > 0 && (
         <>
-          <h3>⏳ Onay Bekleyen AI Taslakları ({draftAssignments.length})</h3>
-          {draftAssignments.map((a: any) => (
-            <div key={a.id} style={{ padding: 10, border: "1px solid var(--accent)", borderRadius: 8, marginBottom: 8 }}>
-              {a.work_date} — {a.profiles?.full_name} — {a.branches?.name} — {a.shift_templates?.name}
-              <div style={{ marginTop: 6 }}>
-                <form action={lockShift} style={{ display: "inline" }}>
-                  <input type="hidden" name="assignment_id" value={a.id} />
-                  <button type="submit" style={{ marginRight: 8, padding: "4px 12px" }}>Onayla</button>
-                </form>
-                <form action={rejectShift} style={{ display: "inline" }}>
-                  <input type="hidden" name="assignment_id" value={a.id} />
-                  <button type="submit" style={{ padding: "4px 12px" }}>Reddet</button>
-                </form>
+          <h3 style={{ marginTop: 32, fontSize: 15, display: "flex", alignItems: "center", gap: 8 }}>
+            <Hourglass size={16} strokeWidth={1.75} color="var(--accent)" />
+            Onay Bekleyen AI Taslakları ({draftAssignments.length})
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {draftAssignments.map((a: any) => (
+              <div key={a.id} style={draftCardStyle}>
+                <span style={{ fontSize: 13 }}>
+                  {a.work_date} — {a.profiles?.full_name} — {a.branches?.name} — {a.shift_templates?.name}
+                </span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <form action={lockShift}>
+                    <input type="hidden" name="assignment_id" value={a.id} />
+                    <button type="submit" style={iconActionStyle("success")}><Check size={14} strokeWidth={2} /></button>
+                  </form>
+                  <form action={rejectShift}>
+                    <input type="hidden" name="assignment_id" value={a.id} />
+                    <button type="submit" style={iconActionStyle("danger")}><X size={14} strokeWidth={2} /></button>
+                  </form>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </>
       )}
 
-      <h3 style={{ marginTop: 24 }}>Son Kayıtlar</h3>
+      <h3 style={{ marginTop: 32, fontSize: 15 }}>Son Kayıtlar</h3>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -143,8 +162,21 @@ export default async function ShiftsPage() {
               <td style={cellStyle}>{a.profiles?.full_name}</td>
               <td style={cellStyle}>{a.branches?.name}</td>
               <td style={cellStyle}>{a.shift_templates?.name}</td>
-              <td style={cellStyle}>{a.source === "ai_agent" ? "🤖 AI" : "Manuel"}</td>
-              <td style={cellStyle}>{a.is_published ? "Yayınlandı" : "Taslak"}</td>
+              <td style={cellStyle}>{a.source === "ai_agent" ? "AI" : "Manuel"}</td>
+              <td style={cellStyle}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 20,
+                    fontFamily: "var(--font-mono)",
+                    background: a.is_published ? "color-mix(in srgb, var(--success) 15%, transparent)" : "color-mix(in srgb, var(--accent) 12%, transparent)",
+                    color: a.is_published ? "var(--success)" : "var(--accent)",
+                  }}
+                >
+                  {a.is_published ? "Yayınlandı" : "Taslak"}
+                </span>
+              </td>
             </tr>
           ))}
         </tbody>
@@ -153,6 +185,60 @@ export default async function ShiftsPage() {
   );
 }
 
+const aiFormStyle: React.CSSProperties = {
+  marginTop: 28,
+  padding: 18,
+  border: "1px solid var(--border)",
+  borderRadius: 14,
+  background: "var(--bg-elevated)",
+};
+const aiSummaryStyle: React.CSSProperties = { cursor: "pointer", fontWeight: 500, fontSize: 13.5 };
+const labelStyle: React.CSSProperties = { fontSize: 12.5, color: "var(--text-secondary)" };
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 9,
+  marginTop: 4,
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg)",
+  color: "var(--text)",
+  fontSize: 13,
+};
+const saveButtonStyle: React.CSSProperties = {
+  padding: "9px 22px",
+  background: "var(--accent)",
+  color: "var(--accent-contrast)",
+  border: "none",
+  borderRadius: 8,
+  fontWeight: 500,
+  fontSize: 13,
+  cursor: "pointer",
+};
+const draftCardStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "10px 14px",
+  border: "1px solid var(--accent)",
+  borderRadius: 10,
+  background: "var(--bg-elevated)",
+};
+function iconActionStyle(variant: "success" | "danger"): React.CSSProperties {
+  const color = variant === "success" ? "var(--success)" : "#D64545";
+  return {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    border: `1px solid ${color}`,
+    background: "transparent",
+    color,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
+}
 const cellStyle: React.CSSProperties = {
   textAlign: "left",
   borderBottom: "1px solid var(--border)",

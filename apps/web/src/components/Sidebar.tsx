@@ -2,29 +2,46 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  CalendarDays,
+  MapPin,
+  QrCode,
+  Users,
+  CalendarClock,
+  Target,
+  ClipboardCheck,
+  Receipt,
+  Bot,
+  Flag,
+  Settings,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 
 const managerRoles = ["company_admin", "store_manager", "regional_manager"];
+
 type NavItem = {
   href: string;
   label: string;
-  icon: string;
+  icon: LucideIcon;
   roles: string[] | null | "super_admin_only";
 };
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", label: "Genel Bakış", icon: "🏠", roles: null },
-  { href: "/dashboard/employees", label: "Personel Listesi", icon: "👤", roles: managerRoles },
-  { href: "/dashboard/shifts", label: "Vardiya Planlama", icon: "📅", roles: managerRoles },
-  { href: "/dashboard/attendance", label: "Giriş-Çıkış Raporu", icon: "📍", roles: managerRoles },
-  { href: "/dashboard/branches/qr", label: "Şube QR Kodları", icon: "🔗", roles: managerRoles },
-  { href: "/dashboard/leave-approvals", label: "İzin Onayları", icon: "🗓️", roles: managerRoles },
-  { href: "/dashboard/performance", label: "Prim / Performans", icon: "🎯", roles: managerRoles },
-  { href: "/dashboard/tasks", label: "Görev / Denetim", icon: "✅", roles: managerRoles },
-  { href: "/dashboard/payroll", label: "Bordro / Puantaj", icon: "🧾", roles: managerRoles },
-  { href: "/dashboard/ai-usage", label: "AI Kullanım", icon: "🤖", roles: ["company_admin"] },
-  { href: "/dashboard/holidays", label: "Resmi Tatiller", icon: "📆", roles: managerRoles },
-  { href: "/dashboard/settings", label: "Şirket Ayarları", icon: "⚙️", roles: ["company_admin"] },
-  { href: "/dashboard/super-admin", label: "Süper Admin", icon: "🛡️", roles: "super_admin_only" },
+  { href: "/dashboard", label: "Genel Bakış", icon: LayoutDashboard, roles: null },
+  { href: "/dashboard/shifts", label: "Vardiya Planlama", icon: CalendarDays, roles: managerRoles },
+  { href: "/dashboard/attendance", label: "Giriş-Çıkış Raporu", icon: MapPin, roles: managerRoles },
+  { href: "/dashboard/branches/qr", label: "Şube QR Kodları", icon: QrCode, roles: managerRoles },
+  { href: "/dashboard/employees", label: "Personel Listesi", icon: Users, roles: managerRoles },
+  { href: "/dashboard/leave-approvals", label: "İzin Onayları", icon: CalendarClock, roles: managerRoles },
+  { href: "/dashboard/performance", label: "Prim / Performans", icon: Target, roles: managerRoles },
+  { href: "/dashboard/tasks", label: "Görev / Denetim", icon: ClipboardCheck, roles: managerRoles },
+  { href: "/dashboard/payroll", label: "Bordro / Puantaj", icon: Receipt, roles: managerRoles },
+  { href: "/dashboard/ai-usage", label: "AI Kullanım", icon: Bot, roles: ["company_admin"] },
+  { href: "/dashboard/holidays", label: "Resmi Tatiller", icon: Flag, roles: managerRoles },
+  { href: "/dashboard/settings", label: "Şirket Ayarları", icon: Settings, roles: ["company_admin"] },
+  { href: "/dashboard/super-admin", label: "Süper Admin", icon: ShieldCheck, roles: "super_admin_only" },
 ];
 
 export default function Sidebar({ roles, isSuperAdmin }: { roles: string[]; isSuperAdmin: boolean }) {
@@ -48,33 +65,51 @@ export default function Sidebar({ roles, isSuperAdmin }: { roles: string[]; isSu
         gap: 4,
       }}
     >
-      <div style={{ padding: "0 12px 20px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18 }}>
+      <div style={{ padding: "0 12px 20px", fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18, letterSpacing: "-0.02em" }}>
         SITAREMLES
       </div>
-      {visibleItems.map((item) => {
-        const active = pathname === item.href;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "9px 12px",
-              borderRadius: 8,
-              textDecoration: "none",
-              fontSize: 14,
-              color: active ? "var(--accent-contrast)" : "var(--text)",
-              background: active ? "var(--accent)" : "transparent",
-              fontWeight: active ? 500 : 400,
-            }}
-          >
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+      <div style={{ flex: 1 }}>
+        {visibleItems.map((item) => {
+          const active = pathname === item.href;
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "9px 12px",
+                borderRadius: 8,
+                textDecoration: "none",
+                fontSize: 13.5,
+                color: active ? "var(--accent-contrast)" : "var(--text)",
+                background: active ? "var(--accent)" : "transparent",
+                fontWeight: active ? 500 : 400,
+                marginBottom: 2,
+              }}
+            >
+              <Icon size={16} strokeWidth={1.75} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          padding: "12px 12px 4px",
+          borderTop: "1px solid var(--border)",
+          marginTop: 12,
+          fontSize: 10.5,
+          color: "var(--text-secondary)",
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        Powered by EASTFUNC
+      </div>
     </aside>
   );
 }

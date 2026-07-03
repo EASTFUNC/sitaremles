@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import RotatingQrCode from "@/components/RotatingQrCode";
+import FormModal from "@/components/FormModal";
+import { Store, MapPinned, Radius } from "lucide-react";
 
 export default async function BranchesPage() {
   const supabase = await createClient();
@@ -43,97 +45,118 @@ export default async function BranchesPage() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
-      <h1>Şube Yönetimi ve QR Kodları</h1>
+    <div style={{ maxWidth: 1000, margin: "0 auto", fontFamily: "var(--font-body)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ marginBottom: 4 }}>Şube Yönetimi</h1>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
+            Şubelerinizi yönetin ve dönen QR kodlarını görüntüleyin.
+          </p>
+        </div>
 
-      <div
-        style={{
-          padding: 20,
-          border: "1px solid var(--border)",
-          borderRadius: 12,
-          background: "var(--bg-elevated)",
-          marginBottom: 24,
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Yeni Şube Ekle</h3>
-        <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: -8 }}>
-          Koordinatları bulmak için: Google Maps&apos;te şubenin konumuna sağ tıkla, üstte çıkan
-          enlem/boylam sayılarına (örn. 41.0151, 28.9795) tıkla — otomatik kopyalanır. Enlem
-          (latitude) ve boylam (longitude) kutularına ayrı ayrı yapıştır.
-        </p>
-        <form action={createBranch} style={{ display: "grid", gap: 10, maxWidth: 400 }}>
-          <label>
-            Şube Adı
-            <input name="name" required style={inputStyle} />
-          </label>
-          <label>
-            Enlem (Latitude)
-            <input name="latitude" type="number" step="any" required style={inputStyle} placeholder="41.0151" />
-          </label>
-          <label>
-            Boylam (Longitude)
-            <input name="longitude" type="number" step="any" required style={inputStyle} placeholder="28.9795" />
-          </label>
-          <label>
-            Geofence Yarıçapı (metre)
-            <input name="radius" type="number" defaultValue={100} required style={inputStyle} />
-          </label>
-          <button
-            type="submit"
-            style={{
-              padding: "10px 20px",
-              background: "var(--accent)",
-              color: "var(--accent-contrast)",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            Şube Oluştur
-          </button>
-        </form>
+        <FormModal
+          triggerLabel="Yeni Şube"
+          icon={<Store size={14} strokeWidth={2} />}
+          title="Yeni Şube Ekle"
+          description="Koordinatları bulmak için Google Maps'te şubenin konumuna sağ tıklayıp çıkan enlem/boylam değerlerini kopyalayabilirsiniz."
+        >
+          <form action={createBranch} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+              Şube Adı
+              <input name="name" required style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Enlem (Latitude)
+              <input name="latitude" type="number" step="any" required style={inputStyle} placeholder="41.0151" />
+            </label>
+            <label style={labelStyle}>
+              Boylam (Longitude)
+              <input name="longitude" type="number" step="any" required style={inputStyle} placeholder="28.9795" />
+            </label>
+            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+              Geofence Yarıçapı (metre)
+              <input name="radius" type="number" defaultValue={100} required style={inputStyle} />
+            </label>
+            <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+              <button type="submit" style={saveButtonStyle}>Şube Oluştur</button>
+            </div>
+          </form>
+        </FormModal>
       </div>
 
-      <h3>Mevcut Şubeler</h3>
-      <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-        Bu QR kodları şube girişine asılabilir/ekranda gösterilebilir. Personel telefonuyla okutarak
-        giriş-çıkış yapar. Her 5 saniyede bir otomatik yenilenir.
-      </p>
-      {branches?.map((b) => (
-        <div
-          key={b.id}
-          style={{
-            display: "flex",
-            gap: 20,
-            alignItems: "center",
-            padding: 16,
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            background: "var(--bg-elevated)",
-            marginBottom: 12,
-          }}
-        >
-          <RotatingQrCode branchId={b.id} branchName={b.name} />
-          <div>
-            <strong style={{ fontFamily: "var(--font-display)" }}>{b.name}</strong>
-            <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0" }}>
-              {b.latitude}, {b.longitude} · Yarıçap: {b.geofence_radius_meters}m
-            </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+        {branches?.map((b) => (
+          <div key={b.id} style={branchCardStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+              <div style={iconBadgeStyle}>
+                <Store size={16} color="var(--accent)" strokeWidth={1.75} />
+              </div>
+              <strong style={{ fontFamily: "var(--font-display)", fontSize: 15 }}>{b.name}</strong>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+              <RotatingQrCode branchId={b.id} branchName={b.name} />
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={metaRowStyle}>
+                <MapPinned size={13} strokeWidth={1.75} />
+                <span>{b.latitude}, {b.longitude}</span>
+              </div>
+              <div style={metaRowStyle}>
+                <Radius size={13} strokeWidth={1.75} />
+                <span>{b.geofence_radius_meters}m yarıçap</span>
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
+const labelStyle: React.CSSProperties = { fontSize: 12.5, color: "var(--text-secondary)" };
 const inputStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
   padding: 8,
   marginTop: 4,
-  borderRadius: 6,
+  borderRadius: 8,
   border: "1px solid var(--border)",
   background: "var(--bg)",
   color: "var(--text)",
+  fontSize: 13,
+};
+const saveButtonStyle: React.CSSProperties = {
+  padding: "9px 22px",
+  background: "var(--accent)",
+  color: "var(--accent-contrast)",
+  border: "none",
+  borderRadius: 8,
+  fontWeight: 500,
+  fontSize: 13,
+  cursor: "pointer",
+};
+const branchCardStyle: React.CSSProperties = {
+  padding: 18,
+  border: "1px solid var(--border)",
+  borderRadius: 16,
+  background: "var(--bg-elevated)",
+};
+const iconBadgeStyle: React.CSSProperties = {
+  width: 30,
+  height: 30,
+  borderRadius: 9,
+  background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+const metaRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 6,
+  fontSize: 12,
+  color: "var(--text-secondary)",
+  fontFamily: "var(--font-mono)",
 };

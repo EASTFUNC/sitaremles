@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import FormModal from "@/components/FormModal";
+import { ClipboardCheck } from "lucide-react";
 
 export default async function TasksPage() {
   const supabase = await createClient();
@@ -59,6 +61,11 @@ export default async function TasksPage() {
     revalidatePath("/dashboard/tasks");
   }
 
+  const statusStyle: Record<string, string> = {
+    pending: "var(--accent)",
+    in_progress: "#E0A030",
+    completed: "var(--success)",
+  };
   const statusLabels: Record<string, string> = {
     pending: "Beklemede",
     in_progress: "Devam Ediyor",
@@ -66,57 +73,103 @@ export default async function TasksPage() {
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: "60px auto", fontFamily: "sans-serif" }}>
-      <h1>Görev / Denetim Atama</h1>
+    <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ marginBottom: 4 }}>Görev / Denetim</h1>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
+            Checklist tabanlı mağaza denetimleri ve görev takibi.
+          </p>
+        </div>
 
-      <form action={assignTask} style={{ marginBottom: 32, padding: 16, border: "1px solid #333" }}>
-        <h3>Yeni Görev Ata</h3>
-        <label>Checklist:</label>
-        <select name="checklist_template_id" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}>
-          {templates?.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-        </select>
-        <label>Şube:</label>
-        <select name="branch_id" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}>
-          {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-        <label>Atanan Personel:</label>
-        <select name="assigned_to" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}>
-          {employees?.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
-        </select>
-        <label>Son Tarih:</label>
-        <input type="date" name="due_date" required style={{ display: "block", width: "100%", marginBottom: 12, padding: 6 }} />
-        <button type="submit" style={{ padding: "8px 16px" }}>Görevi Ata</button>
-      </form>
+        <FormModal triggerLabel="Görev Ata" icon={<ClipboardCheck size={14} strokeWidth={2} />} title="Yeni Görev Ata">
+          <form action={assignTask} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+              Checklist
+              <select name="checklist_template_id" required style={inputStyle}>
+                {templates?.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              Şube
+              <select name="branch_id" required style={inputStyle}>
+                {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              Atanan Personel
+              <select name="assigned_to" required style={inputStyle}>
+                {employees?.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+              </select>
+            </label>
+            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+              Son Tarih
+              <input type="date" name="due_date" required style={inputStyle} />
+            </label>
+            <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+              <button type="submit" style={saveButtonStyle}>Görevi Ata</button>
+            </div>
+          </form>
+        </FormModal>
+      </div>
 
-      <h3>Atanan Görevler</h3>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={cellStyle}>Checklist</th>
-            <th style={cellStyle}>Personel</th>
-            <th style={cellStyle}>Şube</th>
-            <th style={cellStyle}>Son Tarih</th>
-            <th style={cellStyle}>Durum</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assignments?.map((a: any) => (
-            <tr key={a.id}>
-              <td style={cellStyle}>{a.checklist_templates?.title}</td>
-              <td style={cellStyle}>{a.profiles?.full_name}</td>
-              <td style={cellStyle}>{a.branches?.name}</td>
-              <td style={cellStyle}>{a.due_date}</td>
-              <td style={cellStyle}>{statusLabels[a.status]}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {assignments?.map((a: any) => (
+          <div key={a.id} style={rowCardStyle}>
+            <div>
+              <strong style={{ fontSize: 13.5 }}>{a.checklist_templates?.title}</strong>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                {a.profiles?.full_name} · {a.branches?.name} · Son tarih: {a.due_date}
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 11,
+                padding: "3px 10px",
+                borderRadius: 20,
+                fontFamily: "var(--font-mono)",
+                background: `color-mix(in srgb, ${statusStyle[a.status]} 15%, transparent)`,
+                color: statusStyle[a.status],
+              }}
+            >
+              {statusLabels[a.status]}
+            </span>
+          </div>
+        ))}
+        {(!assignments || assignments.length === 0) && <p style={{ color: "var(--text-secondary)" }}>Henüz görev atanmadı.</p>}
+      </div>
     </div>
   );
 }
 
-const cellStyle: React.CSSProperties = {
-  textAlign: "left",
-  borderBottom: "1px solid #333",
-  padding: "8px 6px",
+const labelStyle: React.CSSProperties = { fontSize: 12.5, color: "var(--text-secondary)" };
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 8,
+  marginTop: 4,
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg)",
+  color: "var(--text)",
+  fontSize: 13,
+};
+const saveButtonStyle: React.CSSProperties = {
+  padding: "9px 22px",
+  background: "var(--accent)",
+  color: "var(--accent-contrast)",
+  border: "none",
+  borderRadius: 8,
+  fontWeight: 500,
+  fontSize: 13,
+  cursor: "pointer",
+};
+const rowCardStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "12px 16px",
+  border: "1px solid var(--border)",
+  borderRadius: 12,
+  background: "var(--bg-elevated)",
 };

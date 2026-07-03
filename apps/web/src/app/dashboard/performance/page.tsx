@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import FormModal from "@/components/FormModal";
+import { Target } from "lucide-react";
 
 export default async function PerformancePage() {
   const supabase = await createClient();
@@ -50,35 +52,46 @@ export default async function PerformancePage() {
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: "60px auto", fontFamily: "sans-serif" }}>
-      <h1>Prim / Performans Girişi</h1>
+    <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ marginBottom: 4 }}>Prim / Performans</h1>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
+            Dönemsel değerlendirme ve prim kayıtları.
+          </p>
+        </div>
 
-      <form action={addScore} style={{ marginBottom: 32, padding: 16, border: "1px solid #333" }}>
-        <h3>Yeni Değerlendirme Ekle</h3>
+        <FormModal triggerLabel="Değerlendirme Ekle" icon={<Target size={14} strokeWidth={2} />} title="Yeni Değerlendirme Ekle">
+          <form action={addScore} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+              Personel
+              <select name="user_id" required style={inputStyle}>
+                {employees?.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              Dönem (YYYY-AA)
+              <input type="text" name="period" placeholder="2026-07" required style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Performans Puanı
+              <input type="number" name="score" min="0" max="100" required style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Prim Tutarı (₺)
+              <input type="number" name="bonus_amount" min="0" step="0.01" required style={inputStyle} />
+            </label>
+            <label style={labelStyle}>
+              Not
+              <input type="text" name="notes" style={inputStyle} />
+            </label>
+            <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+              <button type="submit" style={saveButtonStyle}>Kaydet</button>
+            </div>
+          </form>
+        </FormModal>
+      </div>
 
-        <label>Personel:</label>
-        <select name="user_id" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }}>
-          {employees?.map((e) => (
-            <option key={e.id} value={e.id}>{e.full_name}</option>
-          ))}
-        </select>
-
-        <label>Dönem (YYYY-AA):</label>
-        <input type="text" name="period" placeholder="2026-07" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }} />
-
-        <label>Performans Puanı (0-100):</label>
-        <input type="number" name="score" min="0" max="100" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }} />
-
-        <label>Prim Tutarı (₺):</label>
-        <input type="number" name="bonus_amount" min="0" step="0.01" required style={{ display: "block", width: "100%", marginBottom: 8, padding: 6 }} />
-
-        <label>Not:</label>
-        <textarea name="notes" style={{ display: "block", width: "100%", marginBottom: 12, padding: 6 }} />
-
-        <button type="submit" style={{ padding: "8px 16px" }}>Kaydet</button>
-      </form>
-
-      <h3>Geçmiş Değerlendirmeler</h3>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -94,19 +107,43 @@ export default async function PerformancePage() {
             <tr key={s.id}>
               <td style={cellStyle}>{s.period}</td>
               <td style={cellStyle}>{s.profiles?.full_name}</td>
-              <td style={cellStyle}>{s.score}</td>
-              <td style={cellStyle}>{s.bonus_amount} ₺</td>
+              <td style={{ ...cellStyle, fontFamily: "var(--font-mono)" }}>{s.score}</td>
+              <td style={{ ...cellStyle, fontFamily: "var(--font-mono)" }}>{s.bonus_amount} ₺</td>
               <td style={cellStyle}>{s.notes}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {(!scores || scores.length === 0) && <p style={{ color: "var(--text-secondary)" }}>Henüz kayıt yok.</p>}
     </div>
   );
 }
 
+const labelStyle: React.CSSProperties = { fontSize: 12.5, color: "var(--text-secondary)" };
+const inputStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  padding: 8,
+  marginTop: 4,
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg)",
+  color: "var(--text)",
+  fontSize: 13,
+};
+const saveButtonStyle: React.CSSProperties = {
+  padding: "9px 22px",
+  background: "var(--accent)",
+  color: "var(--accent-contrast)",
+  border: "none",
+  borderRadius: 8,
+  fontWeight: 500,
+  fontSize: 13,
+  cursor: "pointer",
+};
 const cellStyle: React.CSSProperties = {
   textAlign: "left",
-  borderBottom: "1px solid #333",
-  padding: "8px 6px",
+  borderBottom: "1px solid var(--border)",
+  padding: "10px 6px",
+  fontSize: 13,
 };

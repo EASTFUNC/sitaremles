@@ -198,7 +198,7 @@ export default function ShiftMatrix() {
         <p style={{ color: "var(--text-secondary)" }}>Yükleniyor...</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <table style={{ borderCollapse: "separate", borderSpacing: 3, width: "100%" }}>
             <thead>
               <tr>
                 <th style={headerCellStyle}>Personel</th>
@@ -285,9 +285,9 @@ export default function ShiftMatrix() {
   );
 }
 
-const selectStyle: React.CSSProperties = { padding: 8, borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" };
-const navButtonStyle: React.CSSProperties = { padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text)", cursor: "pointer", fontSize: 12 };
-const publishButtonStyle: React.CSSProperties = { padding: "8px 16px", borderRadius: 8, border: "none", background: "var(--success)", color: "white", cursor: "pointer", fontWeight: 500, fontSize: 13 };
-const headerCellStyle: React.CSSProperties = { padding: 8, borderBottom: "2px solid var(--border)", fontSize: 12, textAlign: "center" };
-const cellStyle: React.CSSProperties = { padding: 8, border: "1px solid var(--border)", fontSize: 11, textAlign: "center", minWidth: 70 };
-const templateButtonStyle: React.CSSProperties = { padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", cursor: "pointer", fontSize: 12 };
+const selectStyle: React.CSSProperties = { padding: "9px 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text)", fontSize: 13 };
+const navButtonStyle: React.CSSProperties = { padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-elevated)", color: "var(--text)", cursor: "pointer", fontSize: 12.5, fontFamily: "var(--font-mono)" };
+const publishButtonStyle: React.CSSProperties = { padding: "9px 18px", borderRadius: 8, border: "none", background: "var(--success)", color: "white", cursor: "pointer", fontWeight: 500, fontSize: 13 };
+const headerCellStyle: React.CSSProperties = { padding: 10, borderBottom: "1px solid var(--border)", fontSize: 11.5, textAlign: "center", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.03em" };
+const cellStyle: React.CSSProperties = { padding: 10, border: "1px solid var(--border)", fontSize: 12, textAlign: "center", minWidth: 76, borderRadius: 4 };
+const templateButtonStyle: React.CSSProperties = { padding: "7px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", cursor: "pointer", fontSize: 12.5 };
