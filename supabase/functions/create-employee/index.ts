@@ -1,5 +1,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
   let pass = "";
@@ -8,6 +13,11 @@ function generateTempPassword(): string {
 }
 
 Deno.serve(async (req) => {
+
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
   try {
     const authHeader = req.headers.get("Authorization")!;
 
@@ -105,13 +115,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, user_id: newUserId, temp_password: tempPassword }),
-      { headers: { "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, }
     );
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : JSON.stringify(e);
     return new Response(JSON.stringify({ success: false, error: errorMessage }), {
       status: 400,
-      headers: { "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });

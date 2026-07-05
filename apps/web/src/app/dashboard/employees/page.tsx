@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import Link from "next/link";
-import { Users, ArrowRight } from "lucide-react";
+import { Users, ArrowRight, FileSpreadsheet } from "lucide-react";
+import FormModal from "@/components/FormModal";
+import BulkImportPanel from "@/components/BulkImportPanel";
 
 export default async function EmployeesPage() {
   const supabase = await createClient();
@@ -14,11 +16,21 @@ export default async function EmployeesPage() {
     .eq("id", user.id)
     .single();
 
+  const { data: isAdmin } = await supabase.rpc("has_any_role", {
+    p_company_id: profile?.company_id,
+    p_role_codes: ["company_admin"],
+  });
+
   const { data: employees } = await supabase
     .from("profiles")
     .select("id, full_name, status, branches(name)")
     .eq("company_id", profile?.company_id)
     .order("full_name");
+
+  const { data: branches } = await supabase
+    .from("branches")
+    .select("id, name")
+    .eq("company_id", profile?.company_id);
 
   const statusStyle: Record<string, string> = {
     application: "var(--accent)",
@@ -39,18 +51,29 @@ export default async function EmployeesPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
-      <h1 style={{ marginBottom: 4 }}>Personel Listesi</h1>
-      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 24 }}>
-        {employees?.length ?? 0} personel · Detaylar ve özlük dosyası için bir satıra tıklayın.
-      </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ marginBottom: 4 }}>Personel Listesi</h1>
+          <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
+            {employees?.length ?? 0} personel · Detaylar ve özlük dosyası için bir satıra tıklayın.
+          </p>
+        </div>
+
+        {isAdmin && branches && branches.length > 0 && (
+          <FormModal
+            triggerLabel="Excel ile Toplu Ekle"
+            icon={<FileSpreadsheet size={14} strokeWidth={2} />}
+            title="Excel ile Toplu Personel Ekle"
+            description="Dosyada 'Ad Soyad' ve 'E-posta' başlıklı iki sütun olmalı. Hepsi seçtiğiniz şubeye 'employee' rolüyle eklenir."
+          >
+            <BulkImportPanel branches={branches} />
+          </FormModal>
+        )}
+      </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {employees?.map((e: any) => (
-          <Link
-            key={e.id}
-            href={`/dashboard/employees/${e.id}`}
-            style={{ textDecoration: "none", color: "inherit" }}
-          >
+          <Link key={e.id} href={`/dashboard/employees/${e.id}`} style={{ textDecoration: "none", color: "inherit" }}>
             <div style={rowCardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={avatarStyle}>
