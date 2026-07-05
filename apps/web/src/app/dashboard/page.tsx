@@ -21,8 +21,13 @@ export default async function DashboardHomePage() {
     .eq("user_id", user.id)
     .eq("company_id", companyId);
   const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
-  const isManager = roleCodes.some((r: string) => ["company_admin", "store_manager", "regional_manager"].includes(r));
 
+  if (roleCodes.includes("store_display")) {
+    redirect("/dashboard/store");
+  }
+
+  const isManager = roleCodes.some((r: string) => ["company_admin", "store_manager", "regional_manager"].includes(r));
+  
   const { count: employeeCount } = await supabase
     .from("profiles")
     .select("id", { count: "exact", head: true })

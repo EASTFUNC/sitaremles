@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  Store,
   CalendarDays,
   MapPin,
   QrCode,
@@ -30,6 +31,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Genel Bakış", icon: LayoutDashboard, roles: null },
+  { href: "/dashboard/store", label: "Mağaza Paneli", icon: Store, roles: managerRoles },
   { href: "/dashboard/shifts", label: "Vardiya Planlama", icon: CalendarDays, roles: managerRoles },
   { href: "/dashboard/attendance", label: "Giriş-Çıkış Raporu", icon: MapPin, roles: managerRoles },
   { href: "/dashboard/branches/qr", label: "Şube QR Kodları", icon: QrCode, roles: managerRoles },

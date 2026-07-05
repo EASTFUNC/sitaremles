@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
-import Script from "next/script";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -22,8 +21,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq("company_id", profile?.company_id);
 
   const roleCodes = rolesData?.map((r: any) => r.roles?.code).filter(Boolean) ?? [];
+  const isStoreDisplay = roleCodes.includes("store_display");
 
   const { data: isSuperAdmin } = await supabase.rpc("is_super_admin");
+
+  if (isStoreDisplay) {
+    return (
+      <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column" }}>
+        <TopBar userName={profile?.full_name ?? user.email ?? ""} />
+        <main style={{ flex: 1, padding: 24 }}>{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>

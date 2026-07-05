@@ -1,0 +1,1 @@
+insert into roles (code) values ('store_display') on conflict (code) do nothing;
