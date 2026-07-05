@@ -1,0 +1,1 @@
+alter table shift_templates add column if not exists is_active boolean not null default true;

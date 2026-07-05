@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, Text, TextInput, FlatList, StyleSheet, ScrollView, Pressable, Image } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
@@ -132,7 +132,7 @@ function LoginScreen() {
 
 function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai">("home");
+  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai" | "store">("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const tabs: { key: typeof tab; label: string; icon: any }[] = [
@@ -144,6 +144,7 @@ function MainTabs() {
     { key: "tasks", label: "Görevlerim", icon: "checkbox-outline" },
     { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
     { key: "ai", label: "AI Ajanları", icon: "sparkles-outline" },
+    { key: "store", label: "Mağaza Panelim", icon: "storefront-outline" },
   ];
 
   const currentLabel = tab === "notifications" ? "Bildirimler" : tabs.find((t) => t.key === tab)?.label ?? "";
@@ -189,6 +190,7 @@ function MainTabs() {
         {tab === "payroll" && <PayrollScreen />}
         {tab === "notifications" && <NotificationsScreen />}
         {tab === "ai" && <AiAgentsScreen />}
+        {tab === "store" && <StorePanelScreen />}
       </View>
 
       {drawerOpen && (
@@ -1367,6 +1369,203 @@ function HrInsightsPanel({ companyId, colors }: { companyId: string; colors: The
         </View>
       ))}
     </View>
+  );
+}
+function StorePanelScreen() {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const [loading, setLoading] = useState(true);
+  const [isBranchManager, setIsBranchManager] = useState(false);
+  const [branchId, setBranchId] = useState<string | null>(null);
+  const [branchName, setBranchName] = useState("");
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrSecondsLeft, setQrSecondsLeft] = useState(5);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!branchId) return;
+    refreshQr();
+    const qrInterval = setInterval(refreshQr, 5000);
+    const countdownInterval = setInterval(() => setQrSecondsLeft((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => {
+      clearInterval(qrInterval);
+      clearInterval(countdownInterval);
+    };
+  }, [branchId]);
+
+  async function load() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id, branch_id")
+      .eq("id", userId)
+      .single();
+
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("roles(code)")
+      .eq("user_id", userId)
+      .eq("company_id", profile?.company_id);
+    const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+    const isCompanyWide = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+    const isManager = roleCodes.includes("store_manager") && !isCompanyWide;
+    setIsBranchManager(isManager);
+
+    if (!isManager || !profile?.branch_id) {
+      setLoading(false);
+      return;
+    }
+
+    setBranchId(profile.branch_id);
+
+    const { data: branch } = await supabase.from("branches").select("name").eq("id", profile.branch_id).single();
+    setBranchName(branch?.name ?? "");
+
+    const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: profile.company_id });
+    const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
+
+    const { data: rawEmployees } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("company_id", profile.company_id)
+      .eq("branch_id", profile.branch_id)
+      .order("full_name");
+    const branchEmployees = (rawEmployees ?? []).filter((e: any) => !storeDisplayIds.has(e.id));
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartIso = todayStart.toISOString();
+    const employeeIds = branchEmployees.map((e: any) => e.id);
+
+    const { data: todayLogs } = employeeIds.length
+      ? await supabase
+          .from("attendance_logs")
+          .select("user_id, event_type, event_time")
+          .in("user_id", employeeIds)
+          .gte("event_time", todayStartIso)
+          .order("event_time", { ascending: true })
+      : { data: [] };
+
+    const { data: todayLeaves } = employeeIds.length
+      ? await supabase
+          .from("leave_requests")
+          .select("user_id")
+          .in("user_id", employeeIds)
+          .eq("status", "approved")
+          .lte("start_date", todayStartIso.slice(0, 10))
+          .gte("end_date", todayStartIso.slice(0, 10))
+      : { data: [] };
+
+    const onLeaveIds = new Set((todayLeaves ?? []).map((l: any) => l.user_id));
+    const logsByUser: Record<string, any[]> = {};
+    (todayLogs ?? []).forEach((log: any) => {
+      if (!logsByUser[log.user_id]) logsByUser[log.user_id] = [];
+      logsByUser[log.user_id].push(log);
+    });
+
+    const rows = branchEmployees.map((emp: any) => {
+      const logs = logsByUser[emp.id] ?? [];
+      const lastLog = logs[logs.length - 1];
+      const isOnLeave = onLeaveIds.has(emp.id);
+      const isWorking = lastLog?.event_type === "check_in";
+      const hasArrived = logs.some((l: any) => l.event_type === "check_in");
+      let status: "working" | "absent" | "leave" | "left" = "absent";
+      if (isOnLeave) status = "leave";
+      else if (isWorking) status = "working";
+      else if (hasArrived) status = "left";
+      return { id: emp.id, full_name: emp.full_name, status };
+    });
+
+    setEmployees(rows);
+    setLoading(false);
+  }
+
+  async function refreshQr() {
+    if (!branchId) return;
+    const { data, error } = await supabase.rpc("get_current_qr_payload", { p_branch_id: branchId });
+    if (error || !data) return;
+    const payload = JSON.stringify(data);
+    setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(payload)}`);
+    setQrSecondsLeft(5);
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  if (!isBranchManager) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Mağaza Panelim</Text>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>
+          Bu özellik sadece mağaza müdürleri içindir.
+        </Text>
+      </View>
+    );
+  }
+
+  const activeCount = employees.filter((e) => e.status === "working").length;
+  const absentCount = employees.filter((e) => e.status === "absent").length;
+  const leaveCount = employees.filter((e) => e.status === "leave").length;
+
+  const statusBadge: Record<string, { label: string; color: string }> = {
+    working: { label: "Çalışıyor", color: colors.success },
+    absent: { label: "Gelmedi", color: "#D64545" },
+    leave: { label: "İzinli", color: colors.accent },
+    left: { label: "Çıkış Yaptı", color: colors.textSecondary },
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Mağaza Panelim</Text>
+      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginTop: -14, marginBottom: 16 }}>
+        {branchName}
+      </Text>
+
+      <View style={homeStyles.grid}>
+        <StatCard colors={colors} icon="people-outline" label="Personel Sayısı" value={employees.length} />
+        <StatCard colors={colors} icon="checkmark-circle-outline" label="Aktif Çalışan" value={activeCount} accent={colors.success} />
+        <StatCard colors={colors} icon="close-circle-outline" label="Gelmeyen" value={absentCount} accent="#E0A030" />
+        <StatCard colors={colors} icon="calendar-outline" label="İzinli" value={leaveCount} />
+      </View>
+
+      <Text style={styles.subtitle}>Personel Durumları</Text>
+      {employees.map((emp) => {
+        const badge = statusBadge[emp.status];
+        return (
+          <View key={emp.id} style={[styles.card, { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }]}>
+            <Text style={{ color: colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>{emp.full_name}</Text>
+            <View style={[styles.badge, { backgroundColor: `${badge.color}22`, marginTop: 0 }]}>
+              <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
+          </View>
+        );
+      })}
+      {employees.length === 0 && (
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Şubenizde personel yok.</Text>
+      )}
+
+      <Text style={styles.subtitle}>QR Kodu Okutabilirsiniz</Text>
+      <View style={{ alignItems: "center", marginBottom: 40 }}>
+        <View style={{ backgroundColor: "#FFFFFF", padding: 12, borderRadius: 16 }}>
+          {qrUrl && <Image source={{ uri: qrUrl }} style={{ width: 180, height: 180 }} />}
+        </View>
+        <Text style={{ color: colors.textSecondary, fontFamily: "IBMPlexMono_400Regular", fontSize: 11, marginTop: 8 }}>
+          {qrSecondsLeft}s
+        </Text>
+      </View>
+    </ScrollView>
   );
 }
 function createStyles(colors: ThemeColors) {

@@ -78,13 +78,6 @@ export default function ShiftMatrix() {
       setBranches(allBranches ?? []);
       if (allBranches && allBranches.length > 0) setBranchId(allBranches[0].id);
     }
-
-    const { data: templatesData } = await supabase
-      .from("shift_templates")
-      .select("id, name, start_time, end_time")
-      .eq("company_id", profile?.company_id)
-      .order("start_time");
-    setTemplates(templatesData ?? []);
   }
 
   async function loadGrid() {
@@ -99,11 +92,20 @@ export default function ShiftMatrix() {
     const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
     setEmployees((employeesData ?? []).filter((e) => !storeDisplayIds.has(e.id)));
 
+    const { data: templatesData } = await supabase
+      .from("shift_templates")
+      .select("id, name, start_time, end_time, color")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .or(`branch_id.eq.${branchId},branch_id.is.null`)
+      .order("start_time");
+    setTemplates(templatesData ?? []);
+
     const start = formatDate(weekDates[0]);
     const end = formatDate(weekDates[6]);
     const { data: assignmentsData } = await supabase
       .from("shift_assignments")
-      .select("id, user_id, work_date, shift_template_id, is_published, shift_templates(name, start_time, end_time)")
+      .select("id, user_id, work_date, shift_template_id, is_published, shift_templates(name, start_time, end_time, color)")
       .eq("branch_id", branchId)
       .gte("work_date", start)
       .lte("work_date", end);
@@ -255,14 +257,13 @@ export default function ShiftMatrix() {
                         style={{
                           ...cellStyle,
                           cursor: "pointer",
+                          borderLeft: assignment && !isOff ? `3px solid ${assignment.shift_templates?.color ?? "var(--accent)"}` : cellStyle.border,
                           background: isSelected
                             ? "color-mix(in srgb, var(--accent) 20%, transparent)"
                             : isOff
                             ? "color-mix(in srgb, var(--text-secondary) 15%, transparent)"
                             : assignment
-                            ? assignment.is_published
-                              ? "color-mix(in srgb, var(--success) 15%, transparent)"
-                              : "color-mix(in srgb, var(--accent) 10%, transparent)"
+                            ? `color-mix(in srgb, ${assignment.shift_templates?.color ?? "var(--accent)"} ${assignment.is_published ? "18%" : "10%"}, transparent)`
                             : "transparent",
                         }}
                       >
@@ -295,7 +296,8 @@ export default function ShiftMatrix() {
           </strong>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
             {templates.map((t) => (
-              <button key={t.id} disabled={saving} onClick={() => assignShift(t.id)} style={templateButtonStyle}>
+              <button key={t.id} disabled={saving} onClick={() => assignShift(t.id)} style={{ ...templateButtonStyle, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: t.color ?? "var(--accent)", flexShrink: 0 }} />
                 {t.name}
               </button>
             ))}

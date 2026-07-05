@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Store,
+  Clock,
   CalendarDays,
   MapPin,
   QrCode,
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/holidays", label: "Resmi Tatiller", icon: Flag, roles: managerRoles },
   { href: "/dashboard/settings", label: "Şirket Ayarları", icon: Settings, roles: ["company_admin"] },
   { href: "/dashboard/super-admin", label: "Süper Admin", icon: ShieldCheck, roles: "super_admin_only" },
+  { href: "/dashboard/shift-templates", label: "Vardiya Türleri", icon: Clock, roles: ["company_admin"] },
 ];
 
 export default function Sidebar({ roles, isSuperAdmin }: { roles: string[]; isSuperAdmin: boolean }) {
