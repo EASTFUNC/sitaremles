@@ -12,14 +12,29 @@ export default async function BranchesPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
-  const { data: branches } = await supabase
+  const companyId = profile?.company_id;
+
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isAdmin = roleCodes.includes("company_admin");
+
+  const { data: allBranches } = await supabase
     .from("branches")
     .select("id, name, latitude, longitude, geofence_radius_meters, is_active")
-    .eq("company_id", profile?.company_id);
+    .eq("company_id", companyId);
+
+  const branches = isCompanyWideView
+    ? (allBranches ?? [])
+    : (allBranches ?? []).filter((b) => b.id === profile?.branch_id);
 
   async function createBranch(formData: FormData) {
     "use server";
@@ -50,42 +65,44 @@ export default async function BranchesPage() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Şube Yönetimi</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
-            Şubelerinizi yönetin ve dönen QR kodlarını görüntüleyin.
+            {isCompanyWideView ? "Şubelerinizi yönetin ve dönen QR kodlarını görüntüleyin." : "Şubenizin dönen QR kodunu görüntüleyin."}
           </p>
         </div>
 
-        <FormModal
-          triggerLabel="Yeni Şube"
-          icon={<Store size={14} strokeWidth={2} />}
-          title="Yeni Şube Ekle"
-          description="Koordinatları bulmak için Google Maps'te şubenin konumuna sağ tıklayıp çıkan enlem/boylam değerlerini kopyalayabilirsiniz."
-        >
-          <form action={createBranch} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
-            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
-              Şube Adı
-              <input name="name" required style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Enlem (Latitude)
-              <input name="latitude" type="number" step="any" required style={inputStyle} placeholder="41.0151" />
-            </label>
-            <label style={labelStyle}>
-              Boylam (Longitude)
-              <input name="longitude" type="number" step="any" required style={inputStyle} placeholder="28.9795" />
-            </label>
-            <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
-              Geofence Yarıçapı (metre)
-              <input name="radius" type="number" defaultValue={100} required style={inputStyle} />
-            </label>
-            <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-              <button type="submit" style={saveButtonStyle}>Şube Oluştur</button>
-            </div>
-          </form>
-        </FormModal>
+        {isAdmin && (
+          <FormModal
+            triggerLabel="Yeni Şube"
+            icon={<Store size={14} strokeWidth={2} />}
+            title="Yeni Şube Ekle"
+            description="Koordinatları bulmak için Google Maps'te şubenin konumuna sağ tıklayıp çıkan enlem/boylam değerlerini kopyalayabilirsiniz."
+          >
+            <form action={createBranch} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
+              <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+                Şube Adı
+                <input name="name" required style={inputStyle} />
+              </label>
+              <label style={labelStyle}>
+                Enlem (Latitude)
+                <input name="latitude" type="number" step="any" required style={inputStyle} placeholder="41.0151" />
+              </label>
+              <label style={labelStyle}>
+                Boylam (Longitude)
+                <input name="longitude" type="number" step="any" required style={inputStyle} placeholder="28.9795" />
+              </label>
+              <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+                Geofence Yarıçapı (metre)
+                <input name="radius" type="number" defaultValue={100} required style={inputStyle} />
+              </label>
+              <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                <button type="submit" style={saveButtonStyle}>Şube Oluştur</button>
+              </div>
+            </form>
+          </FormModal>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-        {branches?.map((b) => (
+        {branches.map((b) => (
           <div key={b.id} style={branchCardStyle}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
               <div style={iconBadgeStyle}>
@@ -110,6 +127,7 @@ export default async function BranchesPage() {
             </div>
           </div>
         ))}
+        {branches.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Şube bulunamadı.</p>}
       </div>
     </div>
   );

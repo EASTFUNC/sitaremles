@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
+import { CalendarClock, Check, X } from "lucide-react";
 
 export default async function LeaveApprovalsPage() {
   const supabase = await createClient();
@@ -9,15 +10,42 @@ export default async function LeaveApprovalsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
-  const { data: requests } = await supabase
+  const companyId = profile?.company_id;
+
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+
+  let branchEmployeeIds: string[] | null = null;
+  if (isBranchManager && profile?.branch_id) {
+    const { data: branchEmployees } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("branch_id", profile.branch_id);
+    branchEmployeeIds = (branchEmployees ?? []).map((e) => e.id);
+  }
+
+  let requestsQuery = supabase
     .from("leave_requests")
     .select("id, start_date, end_date, status, created_at, profiles!leave_requests_user_id_fkey(full_name), leave_types(name)")
-    .eq("company_id", profile?.company_id)
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false });
+
+  if (branchEmployeeIds) {
+    requestsQuery = requestsQuery.in("user_id", branchEmployeeIds.length > 0 ? branchEmployeeIds : ["00000000-0000-0000-0000-000000000000"]);
+  }
+
+  const { data: requests } = await requestsQuery;
 
   async function updateStatus(formData: FormData) {
     "use server";
@@ -40,38 +68,103 @@ export default async function LeaveApprovalsPage() {
   const processed = requests?.filter((r) => r.status !== "pending") ?? [];
 
   return (
-    <div style={{ maxWidth: 800, margin: "60px auto", fontFamily: "sans-serif" }}>
-      <h1>İzin Onay Kuyruğu</h1>
+    <div style={{ maxWidth: 800, margin: "0 auto", fontFamily: "var(--font-body)" }}>
+      <h1 style={{ marginBottom: 4 }}>İzin Onay Kuyruğu</h1>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 24 }}>
+        {isCompanyWideView ? "Tüm şirketin izin talepleri." : "Şubenizin izin talepleri."}
+      </p>
 
-      <h2>Bekleyen Talepler ({pending.length})</h2>
-      {pending.length === 0 && <p>Bekleyen talep yok.</p>}
-      {pending.map((r: any) => (
-        <div key={r.id} style={{ padding: 12, border: "1px solid #444", marginBottom: 10 }}>
-          <strong>{r.profiles?.full_name}</strong> — {r.leave_types?.name}
-          <br />
-          {r.start_date} → {r.end_date}
-          <div style={{ marginTop: 8 }}>
-            <form action={updateStatus} style={{ display: "inline" }}>
-              <input type="hidden" name="request_id" value={r.id} />
-              <input type="hidden" name="new_status" value="approved" />
-              <button type="submit" style={{ marginRight: 8, padding: "4px 12px" }}>Onayla</button>
-            </form>
-            <form action={updateStatus} style={{ display: "inline" }}>
-              <input type="hidden" name="request_id" value={r.id} />
-              <input type="hidden" name="new_status" value="rejected" />
-              <button type="submit" style={{ padding: "4px 12px" }}>Reddet</button>
-            </form>
+      <h3 style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+        <CalendarClock size={15} strokeWidth={1.75} color="var(--accent)" />
+        Bekleyen Talepler ({pending.length})
+      </h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 28 }}>
+        {pending.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Bekleyen talep yok.</p>}
+        {pending.map((r: any) => (
+          <div key={r.id} style={pendingCardStyle}>
+            <div>
+              <strong style={{ fontSize: 13 }}>{r.profiles?.full_name}</strong>
+              <span style={{ fontSize: 12, color: "var(--text-secondary)", marginLeft: 8 }}>
+                {r.leave_types?.name} · {r.start_date} → {r.end_date}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <form action={updateStatus}>
+                <input type="hidden" name="request_id" value={r.id} />
+                <input type="hidden" name="new_status" value="approved" />
+                <button type="submit" style={iconActionStyle("success")}><Check size={14} strokeWidth={2} /></button>
+              </form>
+              <form action={updateStatus}>
+                <input type="hidden" name="request_id" value={r.id} />
+                <input type="hidden" name="new_status" value="rejected" />
+                <button type="submit" style={iconActionStyle("danger")}><X size={14} strokeWidth={2} /></button>
+              </form>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
 
-      <h2 style={{ marginTop: 32 }}>Geçmiş</h2>
-      {processed.map((r: any) => (
-        <div key={r.id} style={{ padding: 8, opacity: 0.7 }}>
-          {r.profiles?.full_name} — {r.leave_types?.name} — {r.start_date} → {r.end_date} —{" "}
-          <strong>{r.status === "approved" ? "Onaylandı" : "Reddedildi"}</strong>
-        </div>
-      ))}
+      <h3 style={{ fontSize: 14 }}>Geçmiş</h3>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {processed.map((r: any) => (
+          <div key={r.id} style={historyRowStyle}>
+            <span style={{ fontSize: 13 }}>
+              {r.profiles?.full_name} — {r.leave_types?.name} — {r.start_date} → {r.end_date}
+            </span>
+            <span style={statusBadgeStyle(r.status === "approved")}>
+              {r.status === "approved" ? "Onaylandı" : "Reddedildi"}
+            </span>
+          </div>
+        ))}
+        {processed.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Henüz geçmiş kayıt yok.</p>}
+      </div>
     </div>
   );
+}
+
+function statusBadgeStyle(approved: boolean): React.CSSProperties {
+  const color = approved ? "var(--success)" : "#D64545";
+  return {
+    fontSize: 11,
+    padding: "3px 10px",
+    borderRadius: 20,
+    fontFamily: "var(--font-mono)",
+    background: `color-mix(in srgb, ${color} 15%, transparent)`,
+    color,
+  };
+}
+
+const pendingCardStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "12px 16px",
+  border: "1px solid var(--accent)",
+  borderRadius: 12,
+  background: "var(--bg-elevated)",
+};
+const historyRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: "10px 14px",
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  background: "var(--bg-elevated)",
+  opacity: 0.85,
+};
+function iconActionStyle(variant: "success" | "danger"): React.CSSProperties {
+  const color = variant === "success" ? "var(--success)" : "#D64545";
+  return {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    border: `1px solid ${color}`,
+    background: "transparent",
+    color,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  };
 }

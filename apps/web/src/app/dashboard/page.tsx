@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import { Users, CheckCircle2, CalendarClock, ClipboardList, AlertTriangle, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { Users, CheckCircle2, CalendarClock, ClipboardList, AlertTriangle, QrCode, ArrowRight, type LucideIcon } from "lucide-react";
 
 export default async function DashboardHomePage() {
   const supabase = await createClient();
@@ -9,7 +10,7 @@ export default async function DashboardHomePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, company_id")
+    .select("full_name, company_id, branch_id")
     .eq("id", user.id)
     .single();
 
@@ -26,47 +27,137 @@ export default async function DashboardHomePage() {
     redirect("/dashboard/store");
   }
 
-  const isManager = roleCodes.some((r: string) => ["company_admin", "store_manager", "regional_manager"].includes(r));
-  
-  const { count: employeeCount } = await supabase
-    .from("profiles")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", companyId);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+  const isManager = isCompanyWideView || isBranchManager;
+
+  // Sirket geneli mi, yoksa tek magazaya mi odaklanacagiz belirle
+  const branchId = isBranchManager ? profile?.branch_id : null;
+
+  let branchName = "";
+  if (branchId) {
+    const { data: branch } = await supabase.from("branches").select("name").eq("id", branchId).single();
+    branchName = branch?.name ?? "";
+  }
+
+  // "store_display" hesaplarini gercek personel sayimlarindan haric tut
+  const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+  const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
+
+  let branchEmployeeIds: string[] = [];
+  if (isBranchManager && branchId) {
+    const { data: branchEmployees } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("branch_id", branchId);
+    branchEmployeeIds = (branchEmployees ?? []).map((e) => e.id).filter((id) => !storeDisplayIds.has(id));
+  }
 
   const todayStart = new Date().toISOString().slice(0, 10);
-  const { data: todayCheckins } = await supabase
-    .from("attendance_logs")
-    .select("user_id")
-    .eq("company_id", companyId)
-    .eq("event_type", "check_in")
-    .gte("event_time", todayStart);
-  const activeToday = new Set((todayCheckins ?? []).map((c: any) => c.user_id)).size;
 
-  const { count: pendingLeave } = await supabase
-    .from("leave_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", companyId)
-    .eq("status", "pending");
+  let employeeCount = 0;
+  let activeToday = 0;
+  let pendingLeave = 0;
+  let pendingTasks = 0;
+  let suspiciousToday = 0;
+  let recentLeaves: any[] = [];
 
-  const { count: pendingTasks } = await supabase
-    .from("task_assignments")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", companyId)
-    .neq("status", "completed");
+  if (isCompanyWideView) {
+    const { data: allEmployees } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("company_id", companyId);
+    employeeCount = (allEmployees ?? []).filter((e) => !storeDisplayIds.has(e.id)).length;
 
-  const { count: suspiciousToday } = await supabase
-    .from("attendance_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("company_id", companyId)
-    .eq("is_suspicious", true)
-    .gte("event_time", todayStart);
+    const { data: todayCheckins } = await supabase
+      .from("attendance_logs")
+      .select("user_id")
+      .eq("company_id", companyId)
+      .eq("event_type", "check_in")
+      .gte("event_time", todayStart);
+    activeToday = new Set((todayCheckins ?? []).map((c: any) => c.user_id)).size;
 
-  const { data: recentLeaves } = await supabase
-    .from("leave_requests")
-    .select("id, start_date, end_date, status, profiles!leave_requests_user_id_fkey(full_name), leave_types(name)")
-    .eq("company_id", companyId)
-    .order("created_at", { ascending: false })
-    .limit(5);
+    const { count: pendingLeaveCount } = await supabase
+      .from("leave_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .eq("status", "pending");
+    pendingLeave = pendingLeaveCount ?? 0;
+
+    const { count: pendingTasksCount } = await supabase
+      .from("task_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .neq("status", "completed");
+    pendingTasks = pendingTasksCount ?? 0;
+
+    const { count: suspiciousCount } = await supabase
+      .from("attendance_logs")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .eq("is_suspicious", true)
+      .gte("event_time", todayStart);
+    suspiciousToday = suspiciousCount ?? 0;
+
+    const { data: recentLeaveRows } = await supabase
+      .from("leave_requests")
+      .select("id, start_date, end_date, status, profiles!leave_requests_user_id_fkey(full_name), leave_types(name)")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    recentLeaves = recentLeaveRows ?? [];
+  } else if (isBranchManager) {
+    employeeCount = branchEmployeeIds.length;
+
+    const { data: todayCheckins } = branchId
+      ? await supabase
+          .from("attendance_logs")
+          .select("user_id")
+          .eq("branch_id", branchId)
+          .eq("event_type", "check_in")
+          .gte("event_time", todayStart)
+      : { data: [] };
+    activeToday = new Set((todayCheckins ?? []).map((c: any) => c.user_id)).size;
+
+    const { count: pendingLeaveCount } = branchEmployeeIds.length
+      ? await supabase
+          .from("leave_requests")
+          .select("id", { count: "exact", head: true })
+          .in("user_id", branchEmployeeIds)
+          .eq("status", "pending")
+      : { count: 0 };
+    pendingLeave = pendingLeaveCount ?? 0;
+
+    const { count: pendingTasksCount } = branchId
+      ? await supabase
+          .from("task_assignments")
+          .select("id", { count: "exact", head: true })
+          .eq("branch_id", branchId)
+          .neq("status", "completed")
+      : { count: 0 };
+    pendingTasks = pendingTasksCount ?? 0;
+
+    const { count: suspiciousCount } = branchId
+      ? await supabase
+          .from("attendance_logs")
+          .select("id", { count: "exact", head: true })
+          .eq("branch_id", branchId)
+          .eq("is_suspicious", true)
+          .gte("event_time", todayStart)
+      : { count: 0 };
+    suspiciousToday = suspiciousCount ?? 0;
+
+    const { data: recentLeaveRows } = branchEmployeeIds.length
+      ? await supabase
+          .from("leave_requests")
+          .select("id, start_date, end_date, status, profiles!leave_requests_user_id_fkey(full_name), leave_types(name)")
+          .in("user_id", branchEmployeeIds)
+          .order("created_at", { ascending: false })
+          .limit(5)
+      : { data: [] };
+    recentLeaves = recentLeaveRows ?? [];
+  }
 
   return (
     <div style={{ maxWidth: 1000, margin: "0 auto", fontFamily: "var(--font-body)" }}>
@@ -74,14 +165,36 @@ export default async function DashboardHomePage() {
         Hoş geldin
       </p>
       <h1 style={{ marginTop: 0 }}>{profile?.full_name}</h1>
+      {isBranchManager && branchName && (
+        <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: -6 }}>{branchName}</p>
+      )}
+
+      {isBranchManager && (
+        <Link href="/dashboard/store" style={{ textDecoration: "none" }}>
+          <div style={emergencyCardStyle}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={emergencyIconStyle}>
+                <QrCode size={18} color="#E0A030" strokeWidth={1.75} />
+              </div>
+              <div>
+                <strong style={{ fontSize: 14 }}>Acil Durum — Mağaza QR&apos;ını Aç</strong>
+                <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "2px 0 0" }}>
+                  İnternet veya PC sorunu yaşanıyorsa, personelin giriş yapabilmesi için buraya tıklayın.
+                </p>
+              </div>
+            </div>
+            <ArrowRight size={16} color="var(--text-secondary)" strokeWidth={1.75} />
+          </div>
+        </Link>
+      )}
 
       {isManager ? (
         <div style={gridStyle}>
-          <StatCard icon={Users} label="Toplam Personel" value={employeeCount ?? 0} />
+          <StatCard icon={Users} label="Toplam Personel" value={employeeCount} />
           <StatCard icon={CheckCircle2} label="Bugün Aktif" value={activeToday} accent="success" />
-          <StatCard icon={CalendarClock} label="Bekleyen İzin Talebi" value={pendingLeave ?? 0} />
-          <StatCard icon={ClipboardList} label="Bekleyen Görev" value={pendingTasks ?? 0} />
-          <StatCard icon={AlertTriangle} label="Bugün Şüpheli Hareket" value={suspiciousToday ?? 0} accent={suspiciousToday ? "warning" : undefined} />
+          <StatCard icon={CalendarClock} label="Bekleyen İzin Talebi" value={pendingLeave} />
+          <StatCard icon={ClipboardList} label="Bekleyen Görev" value={pendingTasks} />
+          <StatCard icon={AlertTriangle} label="Bugün Şüpheli Hareket" value={suspiciousToday} accent={suspiciousToday ? "warning" : undefined} />
         </div>
       ) : (
         <p style={{ color: "var(--text-secondary)" }}>Kişisel özetiniz için mobil uygulamayı kullanabilirsiniz.</p>
@@ -91,7 +204,7 @@ export default async function DashboardHomePage() {
         <>
           <h3 style={{ marginTop: 40, fontSize: 15 }}>Son İzin Talepleri</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {recentLeaves?.map((l: any) => (
+            {recentLeaves.map((l: any) => (
               <div key={l.id} style={rowCardStyle}>
                 <div>
                   <strong style={{ fontSize: 13 }}>{l.profiles?.full_name}</strong>
@@ -102,7 +215,7 @@ export default async function DashboardHomePage() {
                 <StatusBadge status={l.status} />
               </div>
             ))}
-            {(!recentLeaves || recentLeaves.length === 0) && (
+            {recentLeaves.length === 0 && (
               <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Henüz izin talebi yok.</p>
             )}
           </div>
@@ -182,4 +295,24 @@ const rowCardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: 10,
   background: "var(--bg-elevated)",
+};
+
+const emergencyCardStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  padding: 16,
+  border: "1px solid #E0A030",
+  borderRadius: 14,
+  background: "color-mix(in srgb, #E0A030 8%, var(--bg-elevated))",
+  marginTop: 18,
+};
+const emergencyIconStyle: React.CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 10,
+  background: "color-mix(in srgb, #E0A030 18%, transparent)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };

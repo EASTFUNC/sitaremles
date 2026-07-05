@@ -24,6 +24,7 @@ export default function ShiftMatrix() {
   const [branches, setBranches] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [branchId, setBranchId] = useState<string>("");
+  const [isRestricted, setIsRestricted] = useState(false);
   const [weekStart, setWeekStart] = useState<Date>(getMonday(new Date()));
   const [employees, setEmployees] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -49,17 +50,34 @@ export default function ShiftMatrix() {
     const { data: userData } = await supabase.auth.getUser();
     const { data: profile } = await supabase
       .from("profiles")
-      .select("company_id")
+      .select("company_id, branch_id")
       .eq("id", userData.user?.id)
       .single();
     setCompanyId(profile?.company_id);
 
-    const { data: branchesData } = await supabase
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("roles(code)")
+      .eq("user_id", userData.user?.id)
+      .eq("company_id", profile?.company_id);
+    const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+    const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+    const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+
+    const { data: allBranches } = await supabase
       .from("branches")
       .select("id, name")
       .eq("company_id", profile?.company_id);
-    setBranches(branchesData ?? []);
-    if (branchesData && branchesData.length > 0) setBranchId(branchesData[0].id);
+
+    if (isBranchManager && profile?.branch_id) {
+      const ownBranch = (allBranches ?? []).filter((b) => b.id === profile.branch_id);
+      setBranches(ownBranch);
+      setIsRestricted(true);
+      if (ownBranch.length > 0) setBranchId(ownBranch[0].id);
+    } else {
+      setBranches(allBranches ?? []);
+      if (allBranches && allBranches.length > 0) setBranchId(allBranches[0].id);
+    }
 
     const { data: templatesData } = await supabase
       .from("shift_templates")
@@ -76,7 +94,10 @@ export default function ShiftMatrix() {
       .select("id, full_name")
       .eq("branch_id", branchId)
       .order("full_name");
-    setEmployees(employeesData ?? []);
+
+    const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+    const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
+    setEmployees((employeesData ?? []).filter((e) => !storeDisplayIds.has(e.id)));
 
     const start = formatDate(weekDates[0]);
     const end = formatDate(weekDates[6]);
@@ -175,11 +196,17 @@ export default function ShiftMatrix() {
   return (
     <div>
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} style={selectStyle}>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
+        {isRestricted ? (
+          <span style={{ ...selectStyle, cursor: "default", opacity: 0.85 }}>
+            {branches[0]?.name ?? "Şubeniz"}
+          </span>
+        ) : (
+          <select value={branchId} onChange={(e) => setBranchId(e.target.value)} style={selectStyle}>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
+        )}
 
         <button onClick={() => changeWeek(-7)} style={navButtonStyle}>← Önceki Hafta</button>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 13 }}>

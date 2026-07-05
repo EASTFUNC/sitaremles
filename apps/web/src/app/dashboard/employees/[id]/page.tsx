@@ -23,9 +23,13 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   const { data: employee } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, phone, hire_date, status")
+    .select("id, full_name, employee_code, phone, hire_date, status, branch_id")
     .eq("id", id)
     .single();
+
+  const { data: branches } = isAdmin
+    ? await supabase.from("branches").select("id, name").eq("company_id", adminProfile?.company_id)
+    : { data: [] };
 
   const { data: legalDetails } = isAdmin
     ? await supabase.from("employee_legal_details").select("*").eq("user_id", id).maybeSingle()
@@ -72,6 +76,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     if (!user) redirect("/login");
     await supabase.from("profiles").update({ status: formData.get("status") as string }).eq("id", id);
     revalidatePath(`/dashboard/employees/${id}`);
+  }
+
+  async function updateBranch(formData: FormData) {
+    "use server";
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
+    await supabase.from("profiles").update({ branch_id: formData.get("branch_id") as string }).eq("id", id);
+    revalidatePath(`/dashboard/employees/${id}`);
+    revalidatePath("/dashboard/employees");
   }
 
   async function saveLegalDetails(formData: FormData) {
@@ -177,15 +191,29 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       </div>
 
       {isAdmin && (
-        <form action={updateStatus} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 24 }}>
-          <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>Çalışma Durumu:</span>
-          <select name="status" defaultValue={employee?.status} style={{ ...inputStyle, width: "auto", marginTop: 0 }}>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <button type="submit" style={smallButtonStyle}>Güncelle</button>
-        </form>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 24 }}>
+          <form action={updateStatus} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>Çalışma Durumu:</span>
+            <select name="status" defaultValue={employee?.status} style={{ ...inputStyle, width: "auto", marginTop: 0 }}>
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+            <button type="submit" style={smallButtonStyle}>Güncelle</button>
+          </form>
+
+          {branches && branches.length > 0 && (
+            <form action={updateBranch} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>Şube:</span>
+              <select name="branch_id" defaultValue={employee?.branch_id ?? ""} style={{ ...inputStyle, width: "auto", marginTop: 0 }}>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <button type="submit" style={smallButtonStyle}>Taşı</button>
+            </form>
+          )}
+        </div>
       )}
 
       {isAdmin ? (

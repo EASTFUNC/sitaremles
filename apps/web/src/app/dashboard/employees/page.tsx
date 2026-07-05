@@ -12,25 +12,42 @@ export default async function EmployeesPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
-  const { data: isAdmin } = await supabase.rpc("has_any_role", {
-    p_company_id: profile?.company_id,
-    p_role_codes: ["company_admin"],
-  });
+  const companyId = profile?.company_id;
 
-  const { data: employees } = await supabase
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isAdmin = roleCodes.includes("company_admin");
+  const isCompanyWideView = isAdmin || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+  const ownBranchId = profile?.branch_id;
+
+  // "store_display" (magaza ekrani) hesaplarini personel listesinden haric tut
+  const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+  const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
+
+  const { data: allEmployees } = await supabase
     .from("profiles")
-    .select("id, full_name, status, branches(name)")
-    .eq("company_id", profile?.company_id)
+    .select("id, full_name, status, branch_id, branches(name)")
+    .eq("company_id", companyId)
     .order("full_name");
+
+  let employees = (allEmployees ?? []).filter((e) => !storeDisplayIds.has(e.id));
+  if (isBranchManager) {
+    employees = employees.filter((e) => e.branch_id === ownBranchId);
+  }
 
   const { data: branches } = await supabase
     .from("branches")
     .select("id, name")
-    .eq("company_id", profile?.company_id);
+    .eq("company_id", companyId);
 
   const statusStyle: Record<string, string> = {
     application: "var(--accent)",
@@ -55,7 +72,7 @@ export default async function EmployeesPage() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Personel Listesi</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
-            {employees?.length ?? 0} personel · Detaylar ve özlük dosyası için bir satıra tıklayın.
+            {employees.length} personel · {isCompanyWideView ? "Tüm şirket." : "Şubeniz."} Detaylar ve özlük dosyası için bir satıra tıklayın.
           </p>
         </div>
 
@@ -72,7 +89,7 @@ export default async function EmployeesPage() {
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {employees?.map((e: any) => (
+        {employees.map((e: any) => (
           <Link key={e.id} href={`/dashboard/employees/${e.id}`} style={{ textDecoration: "none", color: "inherit" }}>
             <div style={rowCardStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -104,7 +121,7 @@ export default async function EmployeesPage() {
             </div>
           </Link>
         ))}
-        {(!employees || employees.length === 0) && <p style={{ color: "var(--text-secondary)" }}>Henüz personel yok.</p>}
+        {employees.length === 0 && <p style={{ color: "var(--text-secondary)" }}>Henüz personel yok.</p>}
       </div>
     </div>
   );

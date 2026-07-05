@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import ShiftMatrix from "@/components/ShiftMatrix";
-import { Sparkles, Hourglass, Check, X } from "lucide-react";
 import FormModal from "@/components/FormModal";
+import { Sparkles, Hourglass, Check, X } from "lucide-react";
 
 export default async function ShiftsPage() {
   const supabase = await createClient();
@@ -12,23 +12,42 @@ export default async function ShiftsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
   const companyId = profile?.company_id;
 
-  const { data: branches } = await supabase
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+
+  const { data: allBranches } = await supabase
     .from("branches")
     .select("id, name")
     .eq("company_id", companyId);
 
-  const { data: assignments } = await supabase
+  const branches = isBranchManager
+    ? (allBranches ?? []).filter((b) => b.id === profile?.branch_id)
+    : (allBranches ?? []);
+
+  let assignmentsQuery = supabase
     .from("shift_assignments")
-    .select("id, work_date, source, is_locked, is_published, profiles(full_name), branches(name), shift_templates(name)")
+    .select("id, work_date, source, is_locked, is_published, profiles(full_name), branches(name)")
     .eq("company_id", companyId)
     .order("work_date", { ascending: false })
     .limit(50);
+
+  if (isBranchManager && profile?.branch_id) {
+    assignmentsQuery = assignmentsQuery.eq("branch_id", profile.branch_id);
+  }
+
+  const { data: assignments } = await assignmentsQuery;
 
   async function runShiftAgent(formData: FormData) {
     "use server";
@@ -94,25 +113,27 @@ export default async function ShiftsPage() {
 
       <ShiftMatrix />
 
-      <div style={{ marginTop: 28 }}>
-        <FormModal triggerLabel="Akıllı Plan Oluştur" icon={<Sparkles size={14} strokeWidth={2} />} title="Akıllı Plan Oluştur">
-          <form action={runShiftAgent} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
-            <label style={labelStyle}>
-              Şube
-              <select name="branch_id" required style={inputStyle}>
-                {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </label>
-            <label style={labelStyle}>
-              Haftanın Başlangıcı (Pazartesi)
-              <input type="date" name="week_start" required style={inputStyle} />
-            </label>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <button type="submit" style={saveButtonStyle}>Taslak Plan Oluştur</button>
-            </div>
-          </form>
-        </FormModal>
-      </div>
+      <details style={aiFormStyle}>
+        <summary style={aiSummaryStyle}>
+          <Sparkles size={15} strokeWidth={2} style={{ display: "inline", verticalAlign: -2, marginRight: 6, color: "var(--accent)" }} />
+          Akıllı Plan Oluştur
+        </summary>
+        <form action={runShiftAgent} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14, maxWidth: 480 }}>
+          <label style={labelStyle}>
+            Şube
+            <select name="branch_id" required disabled={isBranchManager} style={inputStyle}>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </label>
+          <label style={labelStyle}>
+            Haftanın Başlangıcı (Pazartesi)
+            <input type="date" name="week_start" required style={inputStyle} />
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <button type="submit" style={saveButtonStyle}>Taslak Plan Oluştur</button>
+          </div>
+        </form>
+      </details>
 
       {draftAssignments.length > 0 && (
         <>

@@ -11,28 +11,52 @@ export default async function AttendancePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
   const companyId = profile?.company_id;
 
-  const { data: employees } = await supabase
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+  const ownBranchId = profile?.branch_id;
+
+  const { data: allEmployees } = await supabase
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, branch_id")
     .eq("company_id", companyId);
 
-  const { data: branches } = await supabase
+  const employees = isBranchManager
+    ? (allEmployees ?? []).filter((e) => e.branch_id === ownBranchId)
+    : (allEmployees ?? []);
+
+  const { data: allBranches } = await supabase
     .from("branches")
     .select("id, name")
     .eq("company_id", companyId);
 
-  const { data: logs } = await supabase
+  const branches = isBranchManager
+    ? (allBranches ?? []).filter((b) => b.id === ownBranchId)
+    : (allBranches ?? []);
+
+  let logsQuery = supabase
     .from("attendance_logs")
     .select("id, event_type, event_time, distance_from_branch_m, is_within_geofence, is_suspicious, qr_payload, profiles!attendance_logs_user_id_fkey(full_name), branches(name)")
     .eq("company_id", companyId)
     .order("event_time", { ascending: false })
     .limit(100);
+
+  if (isBranchManager && ownBranchId) {
+    logsQuery = logsQuery.eq("branch_id", ownBranchId);
+  }
+
+  const { data: logs } = await logsQuery;
 
   async function addManualEntry(formData: FormData) {
     "use server";
@@ -61,10 +85,10 @@ export default async function AttendancePage() {
         <div>
           <h1 style={{ marginBottom: 4 }}>Giriş-Çıkış Raporu</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
-            QR ve GPS ile doğrulanmış giriş-çıkış kayıtları.
+            {isCompanyWideView ? "QR ve GPS ile doğrulanmış giriş-çıkış kayıtları." : "Şubenizin giriş-çıkış kayıtları."}
           </p>
         </div>
-        <ManualAttendanceModal employees={employees ?? []} branches={branches ?? []} action={addManualEntry} />
+        <ManualAttendanceModal employees={employees} branches={branches} action={addManualEntry} />
       </div>
 
       <table style={{ width: "100%", borderCollapse: "collapse" }}>

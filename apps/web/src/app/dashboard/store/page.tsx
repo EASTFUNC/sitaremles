@@ -5,6 +5,8 @@ import RotatingQrCode from "@/components/RotatingQrCode";
 import StoreEmployeeRow from "@/components/StoreEmployeeRow";
 import FormModal from "@/components/FormModal";
 import StoreAccountPanel from "@/components/StoreAccountPanel";
+import ManagerAccountPanel from "@/components/ManagerAccountPanel";
+import { UserCog } from "lucide-react";
 
 export default async function StorePanelPage({
   searchParams,
@@ -38,13 +40,8 @@ export default async function StorePanelPage({
   const currentBranchName = branches?.find((b) => b.id === branchId)?.name ?? "";
 
   // "store_display" (magaza ekrani) hesaplarini gercek personel sayimlarindan haric tutalim
-  const { data: allRoleRows } = await supabase
-    .from("user_roles")
-    .select("user_id, roles(code)")
-    .eq("company_id", companyId);
-  const storeDisplayIds = new Set(
-    (allRoleRows ?? []).filter((r: any) => r.roles?.code === "store_display").map((r: any) => r.user_id)
-  );
+  const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+  const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
 
   const { data: rawEmployees } = await supabase
     .from("profiles")
@@ -124,6 +121,16 @@ export default async function StorePanelPage({
                 ))}
               </select>
             </form>
+          )}
+          {isAdmin && branchId && (
+            <FormModal
+              triggerLabel="Müdür Ata"
+              icon={<UserCog size={14} strokeWidth={2} />}
+              title="Bu Şubeye Müdür Ata"
+              description="Bu şubenin yönetimini üstlenecek bir müdür hesabı oluşturur. Müdür, sadece bu şubenin verilerine erişebilir."
+            >
+              <ManagerAccountPanel branchId={branchId} />
+            </FormModal>
           )}
           {isAdmin && branchId && (
             <FormModal
