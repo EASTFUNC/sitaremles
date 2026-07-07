@@ -1,0 +1,1 @@
+alter table employee_legal_details add column if not exists gender text;

@@ -132,7 +132,7 @@ function LoginScreen() {
 
 function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
-  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai" | "store">("home");
+  const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai" | "store" | "documents">("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const tabs: { key: typeof tab; label: string; icon: any }[] = [
@@ -145,6 +145,7 @@ function MainTabs() {
     { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
     { key: "ai", label: "AI Ajanları", icon: "sparkles-outline" },
     { key: "store", label: "Mağaza Panelim", icon: "storefront-outline" },
+    { key: "documents", label: "Belgelerim", icon: "document-attach-outline" },
   ];
 
   const currentLabel = tab === "notifications" ? "Bildirimler" : tabs.find((t) => t.key === tab)?.label ?? "";
@@ -191,6 +192,7 @@ function MainTabs() {
         {tab === "notifications" && <NotificationsScreen />}
         {tab === "ai" && <AiAgentsScreen />}
         {tab === "store" && <StorePanelScreen />}
+        {tab === "documents" && <MyDocumentsScreen />}
       </View>
 
       {drawerOpen && (
@@ -1565,6 +1567,132 @@ function StorePanelScreen() {
           {qrSecondsLeft}s
         </Text>
       </View>
+    </ScrollView>
+  );
+}
+function MyDocumentsScreen() {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  const [loading, setLoading] = useState(true);
+  const [documentTypes, setDocumentTypes] = useState<any[]>([]);
+  const [uploadedMap, setUploadedMap] = useState<Record<string, any>>({});
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userId).single();
+
+    const { data: types } = await supabase
+      .from("document_types")
+      .select("id, name, is_required")
+      .eq("company_id", profile?.company_id)
+      .eq("is_active", true)
+      .order("sort_order");
+    setDocumentTypes(types ?? []);
+
+    const { data: uploaded } = await supabase
+      .from("employee_documents")
+      .select("id, document_type_id, file_path, uploaded_at")
+      .eq("user_id", userId);
+    const map: Record<string, any> = {};
+    (uploaded ?? []).forEach((d: any) => (map[d.document_type_id] = d));
+    setUploadedMap(map);
+    setLoading(false);
+  }
+
+  async function uploadForType(documentTypeId: string) {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.6 });
+    if (result.canceled) return;
+
+    setUploadingId(documentTypeId);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("id", userId).single();
+
+    const existing = uploadedMap[documentTypeId];
+    if (existing) {
+      await supabase.storage.from("employee-documents").remove([existing.file_path]);
+      await supabase.from("employee_documents").delete().eq("id", existing.id);
+    }
+
+    const fileName = `${userId}/${documentTypeId}_${Date.now()}.jpg`;
+    const response = await fetch(result.assets[0].uri);
+    const blob = await response.blob();
+    const { error: uploadError } = await supabase.storage
+      .from("employee-documents")
+      .upload(fileName, blob, { contentType: "image/jpeg" });
+
+    if (!uploadError) {
+      await supabase.from("employee_documents").insert({
+        company_id: profile?.company_id,
+        user_id: userId,
+        document_type_id: documentTypeId,
+        file_path: fileName,
+        uploaded_by: userId,
+      });
+    }
+
+    setUploadingId(null);
+    load();
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>Belgelerim</Text>
+      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 13, marginTop: -14, marginBottom: 16 }}>
+        Özlük dosyanız için istenen belgeleri buradan yükleyebilirsiniz.
+      </Text>
+      {documentTypes.map((dt) => {
+        const uploaded = uploadedMap[dt.id];
+        const isUploading = uploadingId === dt.id;
+        return (
+          <View key={dt.id} style={styles.card}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 14, color: colors.text }}>
+                  {dt.name} {dt.is_required && <Text style={{ color: "#D64545", fontSize: 11 }}>(Zorunlu)</Text>}
+                </Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>
+                  {uploaded ? `Yüklendi: ${new Date(uploaded.uploaded_at).toLocaleDateString("tr-TR")}` : "Henüz yüklenmedi"}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => uploadForType(dt.id)}
+                disabled={isUploading}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  backgroundColor: colors.accent,
+                  opacity: isUploading ? 0.6 : 1,
+                }}
+              >
+                <Text style={{ color: colors.accentContrast, fontFamily: "Inter_500Medium", fontSize: 12 }}>
+                  {isUploading ? "..." : uploaded ? "Değiştir" : "Yükle"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        );
+      })}
+      {documentTypes.length === 0 && (
+        <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz belge türü tanımlanmamış.</Text>
+      )}
+      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }

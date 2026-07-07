@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Users, ArrowRight, FileSpreadsheet } from "lucide-react";
 import FormModal from "@/components/FormModal";
 import BulkImportPanel from "@/components/BulkImportPanel";
+import AddEmployeePanel from "@/components/AddEmployeePanel";
+import { UserPlus } from "lucide-react";
 
 export default async function EmployeesPage() {
   const supabase = await createClient();
@@ -76,16 +78,28 @@ export default async function EmployeesPage() {
           </p>
         </div>
 
-        {isAdmin && branches && branches.length > 0 && (
-          <FormModal
-            triggerLabel="Excel ile Toplu Ekle"
-            icon={<FileSpreadsheet size={14} strokeWidth={2} />}
-            title="Excel ile Toplu Personel Ekle"
-            description="Dosyada 'Ad Soyad' ve 'E-posta' başlıklı iki sütun olmalı. Hepsi seçtiğiniz şubeye 'employee' rolüyle eklenir."
-          >
-            <BulkImportPanel branches={branches} />
-          </FormModal>
-        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          {(isAdmin || isBranchManager) && branches && branches.length > 0 && (
+            <FormModal triggerLabel="Personel Ekle" icon={<UserPlus size={14} strokeWidth={2} />} title="Yeni Personel Ekle">
+              <AddEmployeePanel
+                branches={isBranchManager ? branches.filter((b) => b.id === ownBranchId) : branches}
+                lockedBranchId={isBranchManager ? ownBranchId ?? undefined : undefined}
+                lockedBranchName={isBranchManager ? branches.find((b) => b.id === ownBranchId)?.name : undefined}
+                companyId={companyId!}
+              />
+            </FormModal>
+          )}
+          {isAdmin && branches && branches.length > 0 && (
+            <FormModal
+              triggerLabel="Excel ile Toplu Ekle"
+              icon={<FileSpreadsheet size={14} strokeWidth={2} />}
+              title="Excel ile Toplu Personel Ekle"
+              description="Dosyada 'Ad Soyad' ve 'E-posta' başlıklı iki sütun olmalı. Hepsi seçtiğiniz şubeye 'employee' rolüyle eklenir."
+            >
+              <BulkImportPanel branches={branches} />
+            </FormModal>
+          )}
+        </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

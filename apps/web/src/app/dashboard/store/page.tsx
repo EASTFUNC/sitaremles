@@ -112,7 +112,12 @@ export default async function StorePanelPage({
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto", fontFamily: "var(--font-body)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
-        <h1 style={{ margin: 0 }}>Mağaza Paneli</h1>
+        <div>
+          <h1 style={{ margin: 0, marginBottom: 4 }}>Mağaza Paneli</h1>
+          {currentBranchName && (
+            <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>{currentBranchName}</p>
+          )}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {isAdmin && branches && branches.length > 1 && branchId && (
             <BranchSelector branches={branches} currentBranchId={branchId} />
