@@ -5,6 +5,7 @@ import RotatingQrCode from "@/components/RotatingQrCode";
 import StoreEmployeeRow from "@/components/StoreEmployeeRow";
 import FormModal from "@/components/FormModal";
 import StoreAccountPanel from "@/components/StoreAccountPanel";
+import BranchSelector from "@/components/BranchSelector";
 import ManagerAccountPanel from "@/components/ManagerAccountPanel";
 import { UserCog } from "lucide-react";
 
@@ -113,14 +114,8 @@ export default async function StorePanelPage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
         <h1 style={{ margin: 0 }}>Mağaza Paneli</h1>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {isAdmin && branches && branches.length > 1 && (
-            <form method="get">
-              <select name="branch_id" defaultValue={branchId} style={selectStyle}>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </form>
+          {isAdmin && branches && branches.length > 1 && branchId && (
+            <BranchSelector branches={branches} currentBranchId={branchId} />
           )}
           {isAdmin && branchId && (
             <FormModal
