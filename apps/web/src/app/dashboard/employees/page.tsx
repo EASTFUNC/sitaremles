@@ -1,13 +1,17 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import Link from "next/link";
-import { Users, ArrowRight, FileSpreadsheet } from "lucide-react";
+import { Users, ArrowRight, FileSpreadsheet, Search } from "lucide-react";
 import FormModal from "@/components/FormModal";
 import BulkImportPanel from "@/components/BulkImportPanel";
 import AddEmployeePanel from "@/components/AddEmployeePanel";
 import { UserPlus } from "lucide-react";
 
-export default async function EmployeesPage() {
+export default async function EmployeesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -46,6 +50,12 @@ export default async function EmployeesPage() {
     employees = employees.filter((e) => e.branch_id === ownBranchId);
   }
 
+  const { q } = await searchParams;
+  if (q && q.trim()) {
+    const query = q.trim().toLocaleLowerCase("tr");
+    employees = employees.filter((e) => e.full_name?.toLocaleLowerCase("tr").includes(query));
+  }
+
   const { data: branches } = await supabase
     .from("branches")
     .select("id, name")
@@ -70,7 +80,7 @@ export default async function EmployeesPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>Personel Listesi</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
@@ -85,7 +95,6 @@ export default async function EmployeesPage() {
                 branches={isBranchManager ? branches.filter((b) => b.id === ownBranchId) : branches}
                 lockedBranchId={isBranchManager ? ownBranchId ?? undefined : undefined}
                 lockedBranchName={isBranchManager ? branches.find((b) => b.id === ownBranchId)?.name : undefined}
-                companyId={companyId!}
               />
             </FormModal>
           )}
@@ -101,6 +110,17 @@ export default async function EmployeesPage() {
           )}
         </div>
       </div>
+
+      <form method="get" style={{ marginBottom: 16, position: "relative", maxWidth: 320 }}>
+        <Search size={14} color="var(--text-secondary)" style={{ position: "absolute", left: 10, top: 10 }} />
+        <input
+          type="text"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="İsim veya soyisim ara..."
+          style={{ ...searchInputStyle, paddingLeft: 32 }}
+        />
+      </form>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {employees.map((e: any) => (
@@ -158,4 +178,13 @@ const avatarStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+};
+const searchInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg-elevated)",
+  color: "var(--text)",
+  fontSize: 13,
 };

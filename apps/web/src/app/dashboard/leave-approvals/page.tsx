@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
-import { CalendarClock, Check, X } from "lucide-react";
+import { CalendarClock, Check, X, Search } from "lucide-react";
 
-export default async function LeaveApprovalsPage() {
+export default async function LeaveApprovalsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -45,7 +49,13 @@ export default async function LeaveApprovalsPage() {
     requestsQuery = requestsQuery.in("user_id", branchEmployeeIds.length > 0 ? branchEmployeeIds : ["00000000-0000-0000-0000-000000000000"]);
   }
 
-  const { data: requests } = await requestsQuery;
+  const { data: rawRequests } = await requestsQuery;
+  const { q } = await searchParams;
+  const requests = q && q.trim()
+    ? (rawRequests ?? []).filter((r: any) =>
+        r.profiles?.full_name?.toLocaleLowerCase("tr").includes(q.trim().toLocaleLowerCase("tr"))
+      )
+    : rawRequests;
 
   async function updateStatus(formData: FormData) {
     "use server";
@@ -70,9 +80,20 @@ export default async function LeaveApprovalsPage() {
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", fontFamily: "var(--font-body)" }}>
       <h1 style={{ marginBottom: 4 }}>İzin Onay Kuyruğu</h1>
-      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 24 }}>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginTop: 0, marginBottom: 16 }}>
         {isCompanyWideView ? "Tüm şirketin izin talepleri." : "Şubenizin izin talepleri."}
       </p>
+
+      <form method="get" style={{ marginBottom: 20, position: "relative", maxWidth: 320 }}>
+        <Search size={14} color="var(--text-secondary)" style={{ position: "absolute", left: 10, top: 10 }} />
+        <input
+          type="text"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="İsim veya soyisim ara..."
+          style={{ ...searchInputStyle, paddingLeft: 32 }}
+        />
+      </form>
 
       <h3 style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
         <CalendarClock size={15} strokeWidth={1.75} color="var(--accent)" />
@@ -168,3 +189,12 @@ function iconActionStyle(variant: "success" | "danger"): React.CSSProperties {
     justifyContent: "center",
   };
 }
+const searchInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg-elevated)",
+  color: "var(--text)",
+  fontSize: 13,
+};

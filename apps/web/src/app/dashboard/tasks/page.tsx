@@ -2,41 +2,77 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import FormModal from "@/components/FormModal";
-import { ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, Search } from "lucide-react";
 
-export default async function TasksPage() {
+export default async function TasksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
   const companyId = profile?.company_id;
+
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+  const ownBranchId = profile?.branch_id;
 
   const { data: templates } = await supabase
     .from("checklist_templates")
     .select("id, title")
     .eq("company_id", companyId);
 
-  const { data: employees } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("company_id", companyId);
+  const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+  const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
 
-  const { data: branches } = await supabase
+  const { data: allEmployees } = await supabase
+    .from("profiles")
+    .select("id, full_name, branch_id")
+    .eq("company_id", companyId);
+  let employees = (allEmployees ?? []).filter((e) => !storeDisplayIds.has(e.id));
+  if (isBranchManager) {
+    employees = employees.filter((e) => e.branch_id === ownBranchId);
+  }
+
+  const { data: allBranches } = await supabase
     .from("branches")
     .select("id, name")
     .eq("company_id", companyId);
+  const branches = isBranchManager
+    ? (allBranches ?? []).filter((b) => b.id === ownBranchId)
+    : (allBranches ?? []);
 
-  const { data: assignments } = await supabase
+  let assignmentsQuery = supabase
     .from("task_assignments")
     .select("id, due_date, status, checklist_templates(title), profiles!task_assignments_assigned_to_fkey(full_name), branches(name)")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false });
+
+  if (isBranchManager && ownBranchId) {
+    assignmentsQuery = assignmentsQuery.eq("branch_id", ownBranchId);
+  }
+
+  const { data: rawAssignments } = await assignmentsQuery;
+  const { q } = await searchParams;
+  const assignments = q && q.trim()
+    ? (rawAssignments ?? []).filter((a: any) =>
+        a.profiles?.full_name?.toLocaleLowerCase("tr").includes(q.trim().toLocaleLowerCase("tr"))
+      )
+    : rawAssignments;
 
   async function assignTask(formData: FormData) {
     "use server";
@@ -74,11 +110,11 @@ export default async function TasksPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>Görev / Denetim</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
-            Checklist tabanlı mağaza denetimleri ve görev takibi.
+            {isCompanyWideView ? "Tüm şirketin" : "Şubenizin"} checklist tabanlı denetimleri ve görev takibi.
           </p>
         </div>
 
@@ -90,12 +126,16 @@ export default async function TasksPage() {
                 {templates?.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
               </select>
             </label>
-            <label style={labelStyle}>
-              Şube
-              <select name="branch_id" required style={inputStyle}>
-                {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </label>
+            {isBranchManager && ownBranchId ? (
+              <input type="hidden" name="branch_id" value={ownBranchId} />
+            ) : (
+              <label style={labelStyle}>
+                Şube
+                <select name="branch_id" required style={inputStyle}>
+                  {branches?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </label>
+            )}
             <label style={labelStyle}>
               Atanan Personel
               <select name="assigned_to" required style={inputStyle}>
@@ -112,6 +152,17 @@ export default async function TasksPage() {
           </form>
         </FormModal>
       </div>
+
+      <form method="get" style={{ marginBottom: 16, position: "relative", maxWidth: 320 }}>
+        <Search size={14} color="var(--text-secondary)" style={{ position: "absolute", left: 10, top: 10 }} />
+        <input
+          type="text"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="Atanan personel ara..."
+          style={{ ...searchInputStyle, paddingLeft: 32 }}
+        />
+      </form>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {assignments?.map((a: any) => (
@@ -172,4 +223,13 @@ const rowCardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: 12,
   background: "var(--bg-elevated)",
+};
+const searchInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg-elevated)",
+  color: "var(--text)",
+  fontSize: 13,
 };

@@ -2,29 +2,63 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import FormModal from "@/components/FormModal";
-import { Target } from "lucide-react";
+import { Target, Search } from "lucide-react";
 
-export default async function PerformancePage() {
+export default async function PerformancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, branch_id")
     .eq("id", user.id)
     .single();
 
-  const { data: employees } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("company_id", profile?.company_id);
+  const companyId = profile?.company_id;
 
-  const { data: scores } = await supabase
+  const { data: rolesData } = await supabase
+    .from("user_roles")
+    .select("roles(code)")
+    .eq("user_id", user.id)
+    .eq("company_id", companyId);
+  const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+  const isCompanyWideView = roleCodes.includes("company_admin") || roleCodes.includes("regional_manager");
+  const isBranchManager = roleCodes.includes("store_manager") && !isCompanyWideView;
+  const ownBranchId = profile?.branch_id;
+
+  const { data: storeDisplayRows } = await supabase.rpc("get_store_display_user_ids", { p_company_id: companyId });
+  const storeDisplayIds = new Set((storeDisplayRows ?? []).map((r: any) => r.user_id));
+
+  const { data: allEmployees } = await supabase
+    .from("profiles")
+    .select("id, full_name, branch_id")
+    .eq("company_id", companyId);
+  let employees = (allEmployees ?? []).filter((e) => !storeDisplayIds.has(e.id));
+  if (isBranchManager) {
+    employees = employees.filter((e) => e.branch_id === ownBranchId);
+  }
+  const employeeIds = new Set(employees.map((e) => e.id));
+
+  const { data: rawScores } = await supabase
     .from("performance_scores")
-    .select("id, period, score, bonus_amount, notes, profiles!performance_scores_user_id_fkey(full_name)")
-    .eq("company_id", profile?.company_id)
+    .select("id, period, score, bonus_amount, notes, user_id, profiles!performance_scores_user_id_fkey(full_name)")
+    .eq("company_id", companyId)
     .order("period", { ascending: false });
+
+  let scores = isBranchManager
+    ? (rawScores ?? []).filter((s: any) => employeeIds.has(s.user_id))
+    : (rawScores ?? []);
+
+  const { q } = await searchParams;
+  if (q && q.trim()) {
+    const query = q.trim().toLocaleLowerCase("tr");
+    scores = scores.filter((s: any) => s.profiles?.full_name?.toLocaleLowerCase("tr").includes(query));
+  }
 
   async function addScore(formData: FormData) {
     "use server";
@@ -53,11 +87,11 @@ export default async function PerformancePage() {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", fontFamily: "var(--font-body)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 16 }}>
         <div>
           <h1 style={{ marginBottom: 4 }}>Prim / Performans</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: 13, margin: 0 }}>
-            Dönemsel değerlendirme ve prim kayıtları.
+            {isCompanyWideView ? "Tüm şirketin" : "Şubenizin"} dönemsel değerlendirme ve prim kayıtları.
           </p>
         </div>
 
@@ -91,6 +125,17 @@ export default async function PerformancePage() {
           </form>
         </FormModal>
       </div>
+
+      <form method="get" style={{ marginBottom: 16, position: "relative", maxWidth: 320 }}>
+        <Search size={14} color="var(--text-secondary)" style={{ position: "absolute", left: 10, top: 10 }} />
+        <input
+          type="text"
+          name="q"
+          defaultValue={q ?? ""}
+          placeholder="İsim veya soyisim ara..."
+          style={{ ...searchInputStyle, paddingLeft: 32 }}
+        />
+      </form>
 
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
@@ -145,5 +190,14 @@ const cellStyle: React.CSSProperties = {
   textAlign: "left",
   borderBottom: "1px solid var(--border)",
   padding: "10px 6px",
+  fontSize: 13,
+};
+const searchInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--bg-elevated)",
+  color: "var(--text)",
   fontSize: 13,
 };

@@ -28,7 +28,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (isStoreDisplay) {
     return (
       <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column" }}>
-        <TopBar userName={profile?.full_name ?? user.email ?? ""} />
+        <TopBar userName={profile?.full_name ?? user.email ?? ""} isSuperAdmin={!!isSuperAdmin} />
         <main style={{ flex: 1, padding: 24 }}>{children}</main>
       </div>
     );
@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Sidebar roles={roleCodes} isSuperAdmin={!!isSuperAdmin} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <TopBar userName={profile?.full_name ?? user.email ?? ""} />
+        <TopBar userName={profile?.full_name ?? user.email ?? ""} isSuperAdmin={!!isSuperAdmin} />
         <main style={{ flex: 1, padding: 24 }}>{children}</main>
       </div>
     </div>
