@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Store,
   Clock,
+  History,
   CalendarDays,
   MapPin,
   QrCode,
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/ai-usage", label: "AI Kullanım", icon: Bot, roles: ["company_admin"] },
   { href: "/dashboard/holidays", label: "Resmi Tatiller", icon: Flag, roles: managerRoles },
   { href: "/dashboard/shift-templates", label: "Vardiya Türleri", icon: Clock, roles: ["company_admin"] },
+  { href: "/dashboard/personnel-reports", label: "Personel Raporları", icon: History, roles: managerRoles },
 ];
 
 export default function Sidebar({ roles, isSuperAdmin }: { roles: string[]; isSuperAdmin: boolean }) {

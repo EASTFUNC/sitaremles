@@ -23,10 +23,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   const { data: employee } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, phone, hire_date, status, branch_id")
+    .select("id, full_name, employee_code, phone, hire_date, status, branch_id, termination_date")
     .eq("id", id)
     .single();
-
+    
   const { data: branches } = isAdmin
     ? await supabase.from("branches").select("id, name").eq("company_id", adminProfile?.company_id)
     : { data: [] };
@@ -74,7 +74,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/login");
-    await supabase.from("profiles").update({ status: formData.get("status") as string }).eq("id", id);
+    const terminationDate = formData.get("termination_date") as string;
+    const hireDate = formData.get("hire_date") as string;
+    await supabase
+      .from("profiles")
+      .update({
+        status: formData.get("status") as string,
+        termination_date: terminationDate || null,
+        hire_date: hireDate || null,
+      })
+      .eq("id", id);
     revalidatePath(`/dashboard/employees/${id}`);
   }
 
@@ -192,13 +201,27 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
       {isAdmin && (
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 24 }}>
-          <form action={updateStatus} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <form action={updateStatus} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>Çalışma Durumu:</span>
             <select name="status" defaultValue={employee?.status} style={{ ...inputStyle, width: "auto", marginTop: 0 }}>
               {Object.entries(statusLabels).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>
+            <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>İşe Giriş Tarihi:</span>
+            <input
+              type="date"
+              name="hire_date"
+              defaultValue={employee?.hire_date ?? ""}
+              style={{ ...inputStyle, width: "auto", marginTop: 0 }}
+            />
+            <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>Ayrılma Tarihi:</span>
+            <input
+              type="date"
+              name="termination_date"
+              defaultValue={employee?.termination_date ?? ""}
+              style={{ ...inputStyle, width: "auto", marginTop: 0 }}
+            />
             <button type="submit" style={smallButtonStyle}>Güncelle</button>
           </form>
 

@@ -409,6 +409,7 @@ function HomeScreen({ onNavigateToCheckIn }: { onNavigateToCheckIn?: () => void 
   const [isManager, setIsManager] = useState(false);
   const [stats, setStats] = useState<any>({});
   const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [tenureDays, setTenureDays] = useState<number | null>(null);
   const [checkedInSince, setCheckedInSince] = useState<string | null>(null);
 
   useEffect(() => {
@@ -422,10 +423,16 @@ function HomeScreen({ onNavigateToCheckIn }: { onNavigateToCheckIn?: () => void 
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("full_name, company_id")
+      .select("full_name, company_id, hire_date")
       .eq("id", userId)
       .single();
     setFullName(profile?.full_name ?? "");
+
+    if (profile?.hire_date) {
+      const hireDate = new Date(profile.hire_date);
+      const diffDays = Math.floor((new Date().getTime() - hireDate.getTime()) / (1000 * 60 * 60 * 24));
+      setTenureDays(diffDays);
+    }
 
     const todayStartForStatus = new Date();
     todayStartForStatus.setHours(0, 0, 0, 0);
@@ -542,6 +549,42 @@ function HomeScreen({ onNavigateToCheckIn }: { onNavigateToCheckIn?: () => void 
         </View>
         <Ionicons name={isCheckedIn ? "log-out-outline" : "log-in-outline"} size={26} color={isCheckedIn ? "#D64545" : colors.accentContrast} />
       </Pressable>
+      {tenureDays !== null && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 14,
+            backgroundColor: colors.bgElevated,
+            borderRadius: 14,
+            padding: 16,
+            marginBottom: 8,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}
+        >
+          <View
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              backgroundColor: `${colors.success}22`,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="ribbon-outline" size={22} color={colors.success} />
+          </View>
+          <View>
+            <Text style={{ color: colors.text, fontFamily: "SpaceGrotesk_700Bold", fontSize: 20 }}>
+              {tenureDays} gün
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12 }}>
+              SITAREMLES ailesindesin
+            </Text>
+          </View>
+        </View>
+      )}
 
       {isManager ? (
         <View style={homeStyles.grid}>
