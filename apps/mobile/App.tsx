@@ -162,7 +162,6 @@ function MainTabs() {
 
   const allTabs: { key: typeof tab; label: string; icon: any; managerOnly?: boolean }[] = [
     { key: "home", label: "Ana Sayfa", icon: "home-outline" },
-    { key: "checkin", label: "Giriş-Çıkış", icon: "location-outline" },
     { key: "shifts", label: "Vardiyam", icon: "calendar-outline" },
     { key: "leave", label: "İzinlerim", icon: "document-text-outline" },
     { key: "expense", label: "Avans", icon: "card-outline" },
@@ -209,7 +208,7 @@ function MainTabs() {
       </View>
 
       <View style={{ flex: 1 }}>
-        {tab === "home" && <HomeScreen />}
+        {tab === "home" && <HomeScreen onNavigateToCheckIn={() => setTab("checkin")} />}
         {tab === "checkin" && <CheckInScreen />}
         {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
@@ -284,8 +283,40 @@ function CheckInScreen() {
   const [scanned, setScanned] = useState(false);
   const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  const [eventType, setEventType] = useState<"check_in" | "check_out">("check_in");
+  const [checkedInSince, setCheckedInSince] = useState<string | null>(null);
   const { colors } = useTheme();
   const styles = createStyles(colors);
+
+  useEffect(() => {
+    refreshStatus();
+  }, []);
+
+  async function refreshStatus() {
+    setCheckingStatus(true);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const { data: todayLogs } = await supabase
+      .from("attendance_logs")
+      .select("event_type, event_time")
+      .eq("user_id", userId)
+      .gte("event_time", todayStart.toISOString())
+      .order("event_time", { ascending: true });
+
+    const lastLog = (todayLogs ?? [])[(todayLogs ?? []).length - 1];
+    if (lastLog?.event_type === "check_in") {
+      setEventType("check_out");
+      setCheckedInSince(new Date(lastLog.event_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+    } else {
+      setEventType("check_in");
+      setCheckedInSince(null);
+    }
+    setCheckingStatus(false);
+  }
 
   async function handleScan({ data }: { data: string }) {
     if (scanned || loading) return;
@@ -305,7 +336,7 @@ function CheckInScreen() {
 
       const { data: rpcResult, error } = await supabase.rpc("record_attendance", {
         p_branch_id: branchId,
-        p_event_type: "check_in",
+        p_event_type: eventType,
         p_latitude: loc.coords.latitude,
         p_longitude: loc.coords.longitude,
         p_qr_payload: data,
@@ -313,11 +344,14 @@ function CheckInScreen() {
 
       if (error) throw error;
 
+      const actionLabel = eventType === "check_in" ? "Giriş" : "Çıkış";
       if (rpcResult.within_geofence) {
-        setResult(`Giriş kaydedildi. Şubeye mesafe: ${rpcResult.distance_m} metre.`);
+        setResult(`${actionLabel} kaydedildi. Şubeye mesafe: ${rpcResult.distance_m} metre.`);
       } else {
-        setResult(`Uyarı: Şube dışından giriş algılandı (mesafe: ${rpcResult.distance_m} metre). Kayıt oluşturuldu, yönetici bilgilendirilecek.`);
+        setResult(`Uyarı: Şube dışından ${actionLabel.toLowerCase()} algılandı (mesafe: ${rpcResult.distance_m} metre). Kayıt oluşturuldu, yönetici bilgilendirilecek.`);
       }
+
+      await refreshStatus();
     } catch (e: any) {
       setResult(`Hata: ${e.message}`);
     } finally {
@@ -345,7 +379,16 @@ function CheckInScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {!scanned ? (
-        <CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={handleScan} />
+        <>
+          {!checkingStatus && (
+            <View style={{ padding: 14, backgroundColor: colors.bgElevated, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12, textAlign: "center" }}>
+                {eventType === "check_out" ? `Mağazadasın, ${checkedInSince}'ten beri` : "Mağaza dışındasın"} — {eventType === "check_in" ? "Giriş" : "Çıkış"} için QR okutun
+              </Text>
+            </View>
+          )}
+          <CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={handleScan} />
+        </>
       ) : (
         <View style={styles.container}>
           <Text style={styles.title}>{loading ? "İşleniyor..." : "Sonuç"}</Text>
@@ -358,13 +401,15 @@ function CheckInScreen() {
     </View>
   );
 }
-function HomeScreen() {
+function HomeScreen({ onNavigateToCheckIn }: { onNavigateToCheckIn?: () => void }) {
   const { colors } = useTheme();
   const styles = createStyles(colors);
   const [loading, setLoading] = useState(true);
   const [fullName, setFullName] = useState("");
   const [isManager, setIsManager] = useState(false);
   const [stats, setStats] = useState<any>({});
+  const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [checkedInSince, setCheckedInSince] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -381,6 +426,23 @@ function HomeScreen() {
       .eq("id", userId)
       .single();
     setFullName(profile?.full_name ?? "");
+
+    const todayStartForStatus = new Date();
+    todayStartForStatus.setHours(0, 0, 0, 0);
+    const { data: todayLogsForStatus } = await supabase
+      .from("attendance_logs")
+      .select("event_type, event_time")
+      .eq("user_id", userId)
+      .gte("event_time", todayStartForStatus.toISOString())
+      .order("event_time", { ascending: true });
+    const lastLog = (todayLogsForStatus ?? [])[((todayLogsForStatus ?? []).length ?? 1) - 1];
+    if (lastLog?.event_type === "check_in") {
+      setIsCheckedIn(true);
+      setCheckedInSince(new Date(lastLog.event_time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }));
+    } else {
+      setIsCheckedIn(false);
+      setCheckedInSince(null);
+    }
 
     const { data: rolesData } = await supabase
       .from("user_roles")
@@ -456,6 +518,30 @@ function HomeScreen() {
     <ScrollView style={styles.container}>
       <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 14 }}>Hoş geldin,</Text>
       <Text style={styles.title}>{fullName}</Text>
+
+      <Pressable
+        onPress={onNavigateToCheckIn}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          backgroundColor: isCheckedIn ? "#D6454522" : colors.accent,
+          borderRadius: 14,
+          padding: 16,
+          marginTop: 16,
+          marginBottom: 8,
+        }}
+      >
+        <View>
+          <Text style={{ color: isCheckedIn ? "#D64545" : colors.accentContrast, fontFamily: "Inter_500Medium", fontSize: 12 }}>
+            {isCheckedIn ? `Şu an: Mağazadasın, ${checkedInSince}'ten beri` : "Şu an: Mağaza dışındasın"}
+          </Text>
+          <Text style={{ color: isCheckedIn ? "#D64545" : colors.accentContrast, fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 16, marginTop: 2 }}>
+            {isCheckedIn ? "Çıkış Yap" : "Giriş Yap"}
+          </Text>
+        </View>
+        <Ionicons name={isCheckedIn ? "log-out-outline" : "log-in-outline"} size={26} color={isCheckedIn ? "#D64545" : colors.accentContrast} />
+      </Pressable>
 
       {isManager ? (
         <View style={homeStyles.grid}>
