@@ -3,11 +3,7 @@ import { createClient } from "@/lib/supabase-server";
 import { Users, CheckCircle2, XCircle, CalendarClock, Store } from "lucide-react";
 import RotatingQrCode from "@/components/RotatingQrCode";
 import StoreEmployeeRow from "@/components/StoreEmployeeRow";
-import FormModal from "@/components/FormModal";
-import StoreAccountPanel from "@/components/StoreAccountPanel";
 import BranchSelector from "@/components/BranchSelector";
-import ManagerAccountPanel from "@/components/ManagerAccountPanel";
-import { UserCog } from "lucide-react";
 
 export default async function StorePanelPage({
   searchParams,
@@ -122,26 +118,6 @@ export default async function StorePanelPage({
           {isAdmin && branches && branches.length > 1 && branchId && (
             <BranchSelector branches={branches} currentBranchId={branchId} />
           )}
-          {isAdmin && branchId && (
-            <FormModal
-              triggerLabel="Müdür Ata"
-              icon={<UserCog size={14} strokeWidth={2} />}
-              title="Bu Şubeye Müdür Ata"
-              description="Bu şubenin yönetimini üstlenecek bir müdür hesabı oluşturur. Müdür, sadece bu şubenin verilerine erişebilir."
-            >
-              <ManagerAccountPanel branchId={branchId} />
-            </FormModal>
-          )}
-          {isAdmin && branchId && (
-            <FormModal
-              triggerLabel="Mağaza Hesabı Oluştur"
-              icon={<Store size={14} strokeWidth={2} />}
-              title="Mağaza Ekranı Hesabı Oluştur"
-              description="Bu hesap, fiziksel ekranda giriş yapıp sadece bu paneli görüntülemek için kullanılır. Gerçek bir personel değildir, sayımlara dahil edilmez."
-            >
-              <StoreAccountPanel branchId={branchId} branchName={currentBranchName} />
-            </FormModal>
-          )}
         </div>
       </div>
 
@@ -199,14 +175,6 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: 14,
   background: "var(--bg-elevated)",
-};
-const selectStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "var(--bg-elevated)",
-  color: "var(--text)",
-  fontSize: 13,
 };
 const qrCardStyle: React.CSSProperties = {
   padding: 20,

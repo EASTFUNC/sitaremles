@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase-server";
 import { revalidatePath } from "next/cache";
 import RotatingQrCode from "@/components/RotatingQrCode";
 import FormModal from "@/components/FormModal";
-import { Store, MapPinned, Radius } from "lucide-react";
+import StoreAccountPanel from "@/components/StoreAccountPanel";
+import ManagerAccountPanel from "@/components/ManagerAccountPanel";
+import { Store, MapPinned, Radius, UserCog, Pencil } from "lucide-react";
+import DeleteBranchButton from "@/components/DeleteBranchButton";
 
 export default async function BranchesPage() {
   const supabase = await createClient();
@@ -30,11 +33,21 @@ export default async function BranchesPage() {
   const { data: allBranches } = await supabase
     .from("branches")
     .select("id, name, latitude, longitude, geofence_radius_meters, is_active")
-    .eq("company_id", companyId);
+    .eq("company_id", companyId)
+    .eq("is_active", true);
 
   const branches = isCompanyWideView
     ? (allBranches ?? [])
     : (allBranches ?? []).filter((b) => b.id === profile?.branch_id);
+
+  const { data: allProfiles } = await supabase
+    .from("profiles")
+    .select("branch_id")
+    .eq("company_id", companyId);
+  const employeeCountByBranch: Record<string, number> = {};
+  (allProfiles ?? []).forEach((p) => {
+    if (p.branch_id) employeeCountByBranch[p.branch_id] = (employeeCountByBranch[p.branch_id] ?? 0) + 1;
+  });
 
   async function createBranch(formData: FormData) {
     "use server";
@@ -55,6 +68,43 @@ export default async function BranchesPage() {
       longitude: Number(formData.get("longitude")),
       geofence_radius_meters: Number(formData.get("radius")),
     });
+
+    revalidatePath("/dashboard/branches/qr");
+  }
+
+  async function updateBranch(formData: FormData) {
+    "use server";
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
+
+    const branchId = formData.get("branch_id") as string;
+
+    await supabase
+      .from("branches")
+      .update({
+        name: formData.get("name") as string,
+        latitude: Number(formData.get("latitude")),
+        longitude: Number(formData.get("longitude")),
+        geofence_radius_meters: Number(formData.get("radius")),
+      })
+      .eq("id", branchId);
+
+    revalidatePath("/dashboard/branches/qr");
+  }
+
+  async function deactivateBranch(formData: FormData) {
+    "use server";
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) redirect("/login");
+
+    const branchId = formData.get("branch_id") as string;
+
+    const { error } = await supabase.from("branches").delete().eq("id", branchId);
+    if (error) {
+      await supabase.from("branches").update({ is_active: false }).eq("id", branchId);
+    }
 
     revalidatePath("/dashboard/branches/qr");
   }
@@ -115,7 +165,7 @@ export default async function BranchesPage() {
               <RotatingQrCode branchId={b.id} branchName={b.name} />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
               <div style={metaRowStyle}>
                 <MapPinned size={13} strokeWidth={1.75} />
                 <span>{b.latitude}, {b.longitude}</span>
@@ -125,6 +175,61 @@ export default async function BranchesPage() {
                 <span>{b.geofence_radius_meters}m yarıçap</span>
               </div>
             </div>
+
+            {isAdmin && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <FormModal
+                  triggerLabel="Müdür Ata"
+                  icon={<UserCog size={13} strokeWidth={2} />}
+                  title={`${b.name} — Müdür Ata`}
+                  description="Bu şubenin yönetimini üstlenecek bir müdür hesabı oluşturur."
+                >
+                  <ManagerAccountPanel branchId={b.id} />
+                </FormModal>
+                <FormModal
+                  triggerLabel="Ekran Hesabı"
+                  icon={<Store size={13} strokeWidth={2} />}
+                  title={`${b.name} — Mağaza Ekranı Hesabı Oluştur`}
+                  description="Fiziksel ekranda giriş yapıp sadece Mağaza Paneli'ni gösterecek kilitli bir hesap oluşturur."
+                >
+                  <StoreAccountPanel branchId={b.id} branchName={b.name} />
+                </FormModal>
+                <FormModal
+                  triggerLabel="Düzenle"
+                  icon={<Pencil size={13} strokeWidth={2} />}
+                  title={`${b.name} — Şube Bilgilerini Düzenle`}
+                >
+                  <form action={updateBranch} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <input type="hidden" name="branch_id" value={b.id} />
+                    <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+                      Şube Adı
+                      <input name="name" defaultValue={b.name} required style={inputStyle} />
+                    </label>
+                    <label style={labelStyle}>
+                      Enlem (Latitude)
+                      <input name="latitude" type="number" step="any" defaultValue={b.latitude} required style={inputStyle} />
+                    </label>
+                    <label style={labelStyle}>
+                      Boylam (Longitude)
+                      <input name="longitude" type="number" step="any" defaultValue={b.longitude} required style={inputStyle} />
+                    </label>
+                    <label style={{ ...labelStyle, gridColumn: "1 / -1" }}>
+                      Geofence Yarıçapı (metre)
+                      <input name="radius" type="number" defaultValue={b.geofence_radius_meters} required style={inputStyle} />
+                    </label>
+                    <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+                      <button type="submit" style={saveButtonStyle}>Kaydet</button>
+                    </div>
+                  </form>
+                </FormModal>
+                <DeleteBranchButton
+                  branchId={b.id}
+                  branchName={b.name}
+                  hasEmployees={(employeeCountByBranch[b.id] ?? 0) > 0}
+                  action={deactivateBranch}
+                />
+              </div>
+            )}
           </div>
         ))}
         {branches.length === 0 && <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>Şube bulunamadı.</p>}

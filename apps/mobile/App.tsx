@@ -134,8 +134,33 @@ function MainTabs() {
   const { colors, mode, toggleTheme } = useTheme();
   const [tab, setTab] = useState<"home" | "checkin" | "shifts" | "leave" | "expense" | "tasks" | "payroll" | "notifications" | "ai" | "store" | "documents">("home");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isManager, setIsManager] = useState(false);
+  const [roleChecked, setRoleChecked] = useState(false);
 
-  const tabs: { key: typeof tab; label: string; icon: any }[] = [
+  useEffect(() => {
+    checkRole();
+  }, []);
+
+  async function checkRole() {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", userId)
+      .single();
+    const { data: rolesData } = await supabase
+      .from("user_roles")
+      .select("roles(code)")
+      .eq("user_id", userId)
+      .eq("company_id", profile?.company_id);
+    const roleCodes = (rolesData ?? []).map((r: any) => r.roles?.code);
+    const managerRoles = ["company_admin", "store_manager", "regional_manager"];
+    setIsManager(roleCodes.some((r: string) => managerRoles.includes(r)));
+    setRoleChecked(true);
+  }
+
+  const allTabs: { key: typeof tab; label: string; icon: any; managerOnly?: boolean }[] = [
     { key: "home", label: "Ana Sayfa", icon: "home-outline" },
     { key: "checkin", label: "Giriş-Çıkış", icon: "location-outline" },
     { key: "shifts", label: "Vardiyam", icon: "calendar-outline" },
@@ -143,10 +168,12 @@ function MainTabs() {
     { key: "expense", label: "Avans", icon: "card-outline" },
     { key: "tasks", label: "Görevlerim", icon: "checkbox-outline" },
     { key: "payroll", label: "Bordrom", icon: "receipt-outline" },
-    { key: "ai", label: "AI Ajanları", icon: "sparkles-outline" },
-    { key: "store", label: "Mağaza Panelim", icon: "storefront-outline" },
     { key: "documents", label: "Belgelerim", icon: "document-attach-outline" },
+    { key: "store", label: "Mağaza Panelim", icon: "storefront-outline", managerOnly: true },
+    { key: "ai", label: "AI Ajanları", icon: "sparkles-outline", managerOnly: true },
   ];
+
+  const tabs = roleChecked ? allTabs.filter((t) => !t.managerOnly || isManager) : allTabs.filter((t) => !t.managerOnly);
 
   const currentLabel = tab === "notifications" ? "Bildirimler" : tabs.find((t) => t.key === tab)?.label ?? "";
 
