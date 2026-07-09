@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, TextInput, FlatList, StyleSheet, ScrollView, Pressable, Image, Alert } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
@@ -209,7 +209,7 @@ function MainTabs() {
 
       <View style={{ flex: 1 }}>
         {tab === "home" && <HomeScreen onNavigateToCheckIn={() => setTab("checkin")} />}
-        {tab === "checkin" && <CheckInScreen />}
+        {tab === "checkin" && <CheckInScreen onDone={() => setTab("home")} />}
         {tab === "shifts" && <WeeklyShiftsScreen />}
         {tab === "leave" && <LeaveRequestScreen />}
         {tab === "expense" && <ExpenseRequestScreen />}
@@ -271,6 +271,35 @@ function MainTabs() {
                 </Pressable>
               );
             })}
+
+            <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 10 }} />
+
+            <Pressable
+              onPress={() => {
+                setDrawerOpen(false);
+                Alert.alert(
+                  "Çıkış Yap",
+                  "Hesabınızdan çıkış yapmak istediğinize emin misiniz?",
+                  [
+                    { text: "Hayır", style: "cancel" },
+                    { text: "Evet", style: "destructive", onPress: () => supabase.auth.signOut() },
+                  ]
+                );
+              }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                paddingVertical: 10,
+                paddingHorizontal: 10,
+                borderRadius: 8,
+              }}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#D64545" />
+              <Text style={{ color: "#D64545", fontFamily: "Inter_500Medium", fontSize: 14 }}>
+                Çıkış Yap
+              </Text>
+            </Pressable>
           </View>
         </>
       )}
@@ -278,14 +307,15 @@ function MainTabs() {
   );
 }
 
-function CheckInScreen() {
+function CheckInScreen({ onDone }: { onDone?: () => void }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const [result, setResult] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(true);
   const [eventType, setEventType] = useState<"check_in" | "check_out">("check_in");
   const [checkedInSince, setCheckedInSince] = useState<string | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{ eventType: "check_in" | "check_out"; time: string; warning: string | null } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
@@ -322,7 +352,9 @@ function CheckInScreen() {
     if (scanned || loading) return;
     setScanned(true);
     setLoading(true);
-    setResult("");
+    setSuccessInfo(null);
+    setErrorMessage(null);
+    const recordedEventType = eventType;
 
     try {
       const payload = JSON.parse(data);
@@ -336,7 +368,7 @@ function CheckInScreen() {
 
       const { data: rpcResult, error } = await supabase.rpc("record_attendance", {
         p_branch_id: branchId,
-        p_event_type: eventType,
+        p_event_type: recordedEventType,
         p_latitude: loc.coords.latitude,
         p_longitude: loc.coords.longitude,
         p_qr_payload: data,
@@ -344,19 +376,24 @@ function CheckInScreen() {
 
       if (error) throw error;
 
-      const actionLabel = eventType === "check_in" ? "Giriş" : "Çıkış";
-      if (rpcResult.within_geofence) {
-        setResult(`${actionLabel} kaydedildi. Şubeye mesafe: ${rpcResult.distance_m} metre.`);
-      } else {
-        setResult(`Uyarı: Şube dışından ${actionLabel.toLowerCase()} algılandı (mesafe: ${rpcResult.distance_m} metre). Kayıt oluşturuldu, yönetici bilgilendirilecek.`);
-      }
+      const nowLabel = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      const warning = rpcResult.within_geofence
+        ? null
+        : `Şube dışından algılandı (mesafe: ${rpcResult.distance_m} metre). Yönetici bilgilendirilecek.`;
+      setSuccessInfo({ eventType: recordedEventType, time: nowLabel, warning });
 
       await refreshStatus();
     } catch (e: any) {
-      setResult(`Hata: ${e.message}`);
+      setErrorMessage(e.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  function resetScan() {
+    setScanned(false);
+    setSuccessInfo(null);
+    setErrorMessage(null);
   }
 
   if (!permission) {
@@ -389,13 +426,54 @@ function CheckInScreen() {
           )}
           <CameraView style={{ flex: 1 }} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={handleScan} />
         </>
+      ) : loading ? (
+        <View style={styles.container}>
+          <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>İşleniyor...</Text>
+        </View>
+      ) : successInfo ? (
+        <View style={{ flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: "center" }}>
+          <View style={{ alignItems: "center" }}>
+            <View
+              style={{
+                width: 76,
+                height: 76,
+                borderRadius: 38,
+                backgroundColor: `${colors.success}22`,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 22,
+              }}
+            >
+              <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+            </View>
+            <Text style={{ fontFamily: "SpaceGrotesk_700Bold", fontSize: 22, color: colors.text, marginBottom: 8, letterSpacing: 0.5 }}>
+              {successInfo.eventType === "check_in" ? "GİRİŞ YAPTINIZ" : "ÇIKIŞ YAPTINIZ"}
+            </Text>
+            <Text style={{ fontFamily: "IBMPlexMono_400Regular", fontSize: 18, color: colors.textSecondary, marginBottom: 24 }}>
+              {successInfo.time}
+            </Text>
+            {successInfo.warning && (
+              <View style={{ backgroundColor: "#E0A03022", borderRadius: 10, padding: 12, marginBottom: 20 }}>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#E0A030", textAlign: "center" }}>
+                  {successInfo.warning}
+                </Text>
+              </View>
+            )}
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.textSecondary, letterSpacing: 1.5 }}>
+              SITAREMLES · EASTFUNC
+            </Text>
+          </View>
+          <View style={{ marginTop: 40 }}>
+            <AppButton title="Tamam" onPress={() => { resetScan(); onDone?.(); }} />
+          </View>
+        </View>
       ) : (
         <View style={styles.container}>
-          <Text style={styles.title}>{loading ? "İşleniyor..." : "Sonuç"}</Text>
+          <Text style={styles.title}>Hata</Text>
           <View style={styles.card}>
-            <Text style={{ color: colors.text, fontFamily: "Inter_400Regular", lineHeight: 20 }}>{result}</Text>
+            <Text style={{ color: colors.text, fontFamily: "Inter_400Regular", lineHeight: 20 }}>{errorMessage}</Text>
           </View>
-          <AppButton title="Tekrar Okut" onPress={() => { setScanned(false); setResult(""); }} variant="secondary" />
+          <AppButton title="Tekrar Okut" onPress={resetScan} variant="secondary" />
         </View>
       )}
     </View>
@@ -724,53 +802,145 @@ function NotificationsScreen() {
     </View>
   );
 }
+function shiftFormatDateStr(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+
+function shiftGetWeekMonday(date: Date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+const shiftDayNames = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+
 function WeeklyShiftsScreen() {
   const [shifts, setShifts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [weekStart, setWeekStart] = useState<Date>(shiftGetWeekMonday(new Date()));
   const { colors } = useTheme();
   const styles = createStyles(colors);
 
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+
   useEffect(() => {
     loadShifts();
-  }, []);
+  }, [weekStart]);
 
   async function loadShifts() {
     setLoading(true);
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData.user?.id;
+    const start = shiftFormatDateStr(weekDates[0]);
+    const end = shiftFormatDateStr(weekDates[6]);
     const { data, error } = await supabase
       .from("shift_assignments")
-      .select("id, work_date, branches(name), shift_templates(name, start_time, end_time)")
+      .select("id, work_date, branches(name), shift_templates(name, start_time, end_time, color)")
       .eq("user_id", userId)
+      .gte("work_date", start)
+      .lte("work_date", end)
       .order("work_date", { ascending: true });
     if (error) console.log("Hata:", error.message);
     setShifts(data ?? []);
     setLoading(false);
   }
 
+  function changeWeek(offsetDays: number) {
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + offsetDays);
+    setWeekStart(d);
+  }
+
+  function getShiftForDate(dateStr: string) {
+    return shifts.find((s: any) => s.work_date === dateStr);
+  }
+
+  const todayStr = shiftFormatDateStr(new Date());
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Haftalık Vardiyam</Text>
+
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 16 }}>
+        <Pressable onPress={() => changeWeek(-7)} hitSlop={10}>
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
+        </Pressable>
+        <Text style={{ color: colors.textSecondary, fontFamily: "IBMPlexMono_400Regular", fontSize: 12 }}>
+          {shiftFormatDateStr(weekDates[0])} — {shiftFormatDateStr(weekDates[6])}
+        </Text>
+        <Pressable onPress={() => changeWeek(7)} hitSlop={10}>
+          <Ionicons name="chevron-forward" size={20} color={colors.text} />
+        </Pressable>
+      </View>
+
       {loading ? (
         <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Yükleniyor...</Text>
       ) : (
-        <FlatList
-          data={shifts}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{item.work_date}</Text>
-              <Text style={styles.cardText}>Şube: {item.branches?.name}</Text>
-              <Text style={styles.cardText}>
-                {item.shift_templates?.name} ({item.shift_templates?.start_time} - {item.shift_templates?.end_time})
-              </Text>
+        weekDates.map((d) => {
+          const dateStr = shiftFormatDateStr(d);
+          const shift: any = getShiftForDate(dateStr);
+          const isToday = dateStr === todayStr;
+          const isOff = shift?.shift_templates?.name?.includes("OFF");
+          return (
+            <View
+              key={dateStr}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: colors.bgElevated,
+                borderRadius: 12,
+                padding: 14,
+                marginBottom: 8,
+                borderWidth: isToday ? 1.5 : 1,
+                borderColor: isToday ? colors.accent : colors.border,
+              }}
+            >
+              <View style={{ width: 56 }}>
+                <Text style={{ color: isToday ? colors.accent : colors.text, fontFamily: "SpaceGrotesk_600SemiBold", fontSize: 13 }}>
+                  {shiftDayNames[d.getDay() === 0 ? 6 : d.getDay() - 1].slice(0, 3)}
+                </Text>
+                <Text style={{ color: colors.textSecondary, fontFamily: "IBMPlexMono_400Regular", fontSize: 11 }}>
+                  {d.getDate()}.{d.getMonth() + 1}
+                </Text>
+              </View>
+
+              {shift ? (
+                isOff ? (
+                  <View style={{ flex: 1, alignItems: "center" }}>
+                    <Text style={{ color: colors.textSecondary, fontFamily: "Inter_500Medium", fontSize: 13 }}>İzin Günü</Text>
+                  </View>
+                ) : (
+                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <View style={{ width: 4, height: 34, borderRadius: 2, backgroundColor: shift.shift_templates?.color ?? colors.accent }} />
+                    <View>
+                      <Text style={{ color: colors.text, fontFamily: "Inter_500Medium", fontSize: 13 }}>
+                        {shift.shift_templates?.start_time?.slice(0, 5)} - {shift.shift_templates?.end_time?.slice(0, 5)}
+                      </Text>
+                      <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 11.5 }}>
+                        {shift.shift_templates?.name} · {shift.branches?.name}
+                      </Text>
+                    </View>
+                  </View>
+                )
+              ) : (
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular", fontSize: 12.5 }}>Vardiya yok</Text>
+                </View>
+              )}
             </View>
-          )}
-          ListEmptyComponent={<Text style={{ color: colors.textSecondary, fontFamily: "Inter_400Regular" }}>Henüz vardiya ataması yok.</Text>}
-        />
+          );
+        })
       )}
-      <AppButton title="Çıkış Yap" onPress={() => supabase.auth.signOut()} variant="secondary" />
-    </View>
+
+      <View style={{ height: 30 }} />
+    </ScrollView>
   );
 }
 
